@@ -2,6 +2,7 @@ package com.neuralcast.radioplayer.ui
 
 import android.app.Application
 import android.content.ComponentName
+import android.net.Uri
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -14,6 +15,7 @@ import com.neuralcast.radioplayer.model.PlaybackStatus
 import com.neuralcast.radioplayer.model.RadioStation
 import com.neuralcast.radioplayer.model.UiState
 import com.neuralcast.radioplayer.playback.PlaybackService
+import com.neuralcast.radioplayer.R
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -25,12 +27,16 @@ class RadioPlayerViewModel(application: Application) : AndroidViewModel(applicat
         RadioStation(
             id = "neuralcast",
             name = "NeuralCast",
-            streamUrl = "https://neuralcast.duckdns.org/listen/neuralcast/radio.mp3"
+            streamUrl = "https://neuralcast.duckdns.org/listen/neuralcast/radio.mp3",
+            backgroundResId = R.drawable.neuralcast_bg,
+            artworkResId = R.drawable.neuralcast_art
         ),
         RadioStation(
             id = "neuralforge",
             name = "NeuralForge",
-            streamUrl = "https://neuralcast.duckdns.org/listen/neuralforge/radio.mp3"
+            streamUrl = "https://neuralcast.duckdns.org/listen/neuralforge/radio.mp3",
+            backgroundResId = R.drawable.neuralforge_bg,
+            artworkResId = R.drawable.neuralforge_art
         )
     )
 
@@ -143,12 +149,14 @@ class RadioPlayerViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     private fun startPlayback(mediaController: MediaController, station: RadioStation) {
+        val artworkUri = Uri.parse("android.resource://${getApplication<Application>().packageName}/${station.artworkResId}")
         val mediaItem = MediaItem.Builder()
             .setMediaId(station.id)
             .setUri(station.streamUrl)
             .setMediaMetadata(
                 MediaMetadata.Builder()
                     .setStation(station.name)
+                    .setArtworkUri(artworkUri)
                     .build()
             )
             .build()

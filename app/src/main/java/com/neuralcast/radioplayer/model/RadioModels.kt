@@ -4,6 +4,8 @@ data class RadioStation(
     val id: String,
     val name: String,
     val streamUrl: String,
+    val backgroundResId: Int,
+    val artworkResId: Int,
     val description: String? = null
 )
 
