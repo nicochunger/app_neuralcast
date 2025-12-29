@@ -89,6 +89,8 @@ class RadioPlayerViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
+    private var sleepTimerJob: kotlinx.coroutines.Job? = null
+
     init {
         connectToSession()
     }
@@ -107,6 +109,35 @@ class RadioPlayerViewModel(application: Application) : AndroidViewModel(applicat
             stopPlayback(mediaController)
         } else {
             startPlayback(mediaController, station)
+        }
+    }
+    
+    fun setVolume(volume: Float) {
+        controller?.volume = volume
+        _uiState.update { it.copy(volume = volume) }
+    }
+
+    fun setSleepTimer(minutes: Int?) {
+        sleepTimerJob?.cancel()
+        
+        if (minutes == null) {
+            _uiState.update { it.copy(sleepTimerRemaining = null) }
+            return
+        }
+
+        val totalMillis = minutes * 60 * 1000L
+        val startTime = System.currentTimeMillis()
+        
+        sleepTimerJob = viewModelScope.launch {
+            _uiState.update { it.copy(sleepTimerRemaining = totalMillis) }
+            while (System.currentTimeMillis() - startTime < totalMillis) {
+                kotlinx.coroutines.delay(1000L) // Update every second
+                val remaining = totalMillis - (System.currentTimeMillis() - startTime)
+                _uiState.update { it.copy(sleepTimerRemaining = remaining) }
+            }
+            // Timer finished
+            controller?.let { stopPlayback(it) }
+            _uiState.update { it.copy(sleepTimerRemaining = null) }
         }
     }
 
@@ -138,6 +169,8 @@ class RadioPlayerViewModel(application: Application) : AndroidViewModel(applicat
                     controller = mediaController
                     mediaController.addListener(playerListener)
                     updatePlaybackState()
+                    // Sync initial volume
+                     _uiState.update { it.copy(volume = mediaController.volume) }
                 } catch (error: Exception) {
                     _uiState.update { current ->
                         current.copy(errorMessage = "Unable to connect to player.")
@@ -179,6 +212,7 @@ class RadioPlayerViewModel(application: Application) : AndroidViewModel(applicat
     private fun stopPlayback(mediaController: MediaController) {
         mediaController.stop()
         mediaController.clearMediaItems()
+        setSleepTimer(null) // Cancel timer on manual stop
 
         _uiState.update { current ->
             current.copy(
@@ -222,10 +256,22 @@ class RadioPlayerViewModel(application: Application) : AndroidViewModel(applicat
             return null
         }
 
-        return when {
+        val currentTrack = when {
             !artist.isNullOrBlank() && !resolvedTitle.isNullOrBlank() -> "$artist - $resolvedTitle"
             !resolvedTitle.isNullOrBlank() -> resolvedTitle
             else -> null
         }
+        
+        // Update history if track changed
+        if (currentTrack != null && currentTrack != _uiState.value.nowPlaying) {
+             _uiState.update { current ->
+                 val newHistory = (listOf(currentTrack) + current.recentlyPlayed)
+                     .distinct()
+                     .take(5)
+                 current.copy(recentlyPlayed = newHistory)
+             }
+        }
+
+        return currentTrack
     }
 }

@@ -32,6 +32,8 @@ class MainActivity : ComponentActivity() {
                 RadioScreen(
                     uiState = uiState,
                     onPlayToggle = { station -> viewModel.onPlayToggle(station) },
+                    onVolumeChange = viewModel::setVolume,
+                    onSleepTimerSet = viewModel::setSleepTimer,
                     onErrorShown = viewModel::onErrorShown
                 )
             }
