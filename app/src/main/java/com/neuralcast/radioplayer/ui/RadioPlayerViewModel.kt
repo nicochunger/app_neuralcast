@@ -156,6 +156,7 @@ class RadioPlayerViewModel(application: Application) : AndroidViewModel(applicat
             .setMediaMetadata(
                 MediaMetadata.Builder()
                     .setStation(station.name)
+                    .setSubtitle(station.name)
                     .setArtworkUri(artworkUri)
                     .build()
             )

@@ -8,7 +8,6 @@ import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
-import androidx.media3.session.DefaultMediaNotificationProvider
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import com.neuralcast.radioplayer.MainActivity
@@ -54,7 +53,7 @@ class PlaybackService : MediaSessionService() {
 
         player = exoPlayer
         mediaSession = session
-        setMediaNotificationProvider(DefaultMediaNotificationProvider(this))
+        setMediaNotificationProvider(StationNotificationProvider(this))
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? {
