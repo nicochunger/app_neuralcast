@@ -23,35 +23,14 @@
 
 ## Building and Running
 
-The project uses Gradle with Kotlin DSL scripts (`.kts`).
+The project is primarily built and managed using **Android Studio**.
+
+**Note for AI Agent:** Do not attempt to run build commands (e.g., `./gradlew ...`) yourself. The user handles all builds, deployments, and testing within Android Studio. Focus strictly on code analysis, architectural suggestions, and file modifications.
 
 ### Prerequisites
+*   Android Studio (latest stable version).
 *   JDK 17 or higher.
-*   Android SDK (Command line tools or Android Studio).
-*   Valid `local.properties` file with `sdk.dir` (if not set in env).
-
-### Common Commands
-
-*   **Build Debug APK:**
-    ```bash
-    ./gradlew assembleDebug
-    ```
-    *Output:* `app/build/outputs/apk/debug/app-debug.apk`
-
-*   **Run Unit Tests:**
-    ```bash
-    ./gradlew testDebugUnitTest
-    ```
-
-*   **Run Lint Checks:**
-    ```bash
-    ./gradlew lintDebug
-    ```
-
-*   **Clean Project:**
-    ```bash
-    ./gradlew clean
-    ```
+*   Android SDK 34 (compile and target).
 
 ## Development Conventions
 
