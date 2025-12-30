@@ -23,6 +23,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material3.BottomAppBar
@@ -70,7 +71,8 @@ fun RadioScreen(
     onPlayToggle: (RadioStation) -> Unit,
     onVolumeChange: (Float) -> Unit,
     onSleepTimerSet: (Int?) -> Unit,
-    onErrorShown: () -> Unit
+    onErrorShown: () -> Unit,
+    onSettingsClick: () -> Unit
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
     val errorMessage = uiState.errorMessage
@@ -86,6 +88,14 @@ fun RadioScreen(
         topBar = {
             CenterAlignedTopAppBar(
                 title = { Text(text = "NeuralCast Radio") },
+                navigationIcon = {
+                    IconButton(onClick = onSettingsClick) {
+                        Icon(
+                            imageVector = Icons.Default.Settings,
+                            contentDescription = "Settings"
+                        )
+                    }
+                },
                 actions = {
                     SleepTimerMenu(
                         timerRemaining = uiState.sleepTimerRemaining,

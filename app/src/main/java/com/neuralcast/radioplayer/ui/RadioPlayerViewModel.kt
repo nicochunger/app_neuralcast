@@ -22,23 +22,14 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
+import com.neuralcast.radioplayer.data.SettingsRepository
+import com.neuralcast.radioplayer.data.StationProvider
+import com.neuralcast.radioplayer.model.AppTheme
+import com.neuralcast.radioplayer.model.BufferSize
+
 class RadioPlayerViewModel(application: Application) : AndroidViewModel(application) {
-    private val stations = listOf(
-        RadioStation(
-            id = "neuralcast",
-            name = "NeuralCast",
-            streamUrl = "https://neuralcast.duckdns.org/listen/neuralcast/radio.mp3",
-            backgroundResId = R.drawable.neuralcast_bg,
-            artworkResId = R.drawable.neuralcast_art
-        ),
-        RadioStation(
-            id = "neuralforge",
-            name = "NeuralForge",
-            streamUrl = "https://neuralcast.duckdns.org/listen/neuralforge/radio.mp3",
-            backgroundResId = R.drawable.neuralforge_bg,
-            artworkResId = R.drawable.neuralforge_art
-        )
-    )
+    private val settingsRepository = SettingsRepository(application)
+    private val stations = StationProvider.stations
 
     private val _uiState = MutableStateFlow(
         UiState(
@@ -93,6 +84,29 @@ class RadioPlayerViewModel(application: Application) : AndroidViewModel(applicat
 
     init {
         connectToSession()
+        viewModelScope.launch {
+            settingsRepository.preferences.collect { prefs ->
+                _uiState.update { it.copy(appPreferences = prefs) }
+                // Apply volume if not set by user yet? Or just respect what the slider says.
+                // The slider is bound to uiState.volume.
+                // If the player is not connected, we might want to initialize volume from prefs.
+                if (controller == null) {
+                     _uiState.update { it.copy(volume = prefs.defaultVolume) }
+                }
+            }
+        }
+    }
+
+    fun saveTheme(theme: AppTheme) {
+        viewModelScope.launch { settingsRepository.setTheme(theme) }
+    }
+
+    fun saveBufferSize(size: BufferSize) {
+        viewModelScope.launch { settingsRepository.setBufferSize(size) }
+    }
+
+    fun saveDefaultVolume(volume: Float) {
+        viewModelScope.launch { settingsRepository.setDefaultVolume(volume) }
     }
 
     fun onPlayToggle(station: RadioStation) {

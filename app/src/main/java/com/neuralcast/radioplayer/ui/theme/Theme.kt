@@ -12,17 +12,17 @@ import androidx.compose.ui.platform.LocalContext
 
 @Composable
 fun NeuralCastTheme(
+    darkTheme: Boolean = isSystemInDarkTheme(),
     dynamicColor: Boolean = true,
     content: @Composable () -> Unit
 ) {
-    val useDarkTheme = isSystemInDarkTheme()
     val context = LocalContext.current
 
     val colorScheme = when {
         dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
-            if (useDarkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+            if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
         }
-        useDarkTheme -> darkColorScheme()
+        darkTheme -> darkColorScheme()
         else -> lightColorScheme()
     }
 
