@@ -26,6 +26,7 @@ import com.neuralcast.radioplayer.data.SettingsRepository
 import com.neuralcast.radioplayer.data.StationProvider
 import com.neuralcast.radioplayer.model.AppTheme
 import com.neuralcast.radioplayer.model.BufferSize
+import com.neuralcast.radioplayer.util.MetadataHelper
 
 class RadioPlayerViewModel(application: Application) : AndroidViewModel(application) {
     private val settingsRepository = SettingsRepository(application)
@@ -62,10 +63,17 @@ class RadioPlayerViewModel(application: Application) : AndroidViewModel(applicat
         }
 
         override fun onMediaMetadataChanged(mediaMetadata: MediaMetadata) {
-            val nowPlaying = extractNowPlaying(mediaMetadata)
+            val stationName = stations.firstOrNull { it.id == _uiState.value.activeStationId }?.name
+            val nowPlaying = MetadataHelper.extractNowPlaying(mediaMetadata, stationName)
             if (nowPlaying != null) {
                 _uiState.update { current ->
-                    current.copy(nowPlaying = nowPlaying)
+                    // Update history if track changed
+                    val newHistory = if (nowPlaying != current.nowPlaying) {
+                        (listOf(nowPlaying) + current.recentlyPlayed).distinct().take(5)
+                    } else {
+                        current.recentlyPlayed
+                    }
+                    current.copy(nowPlaying = nowPlaying, recentlyPlayed = newHistory)
                 }
             }
         }
@@ -252,40 +260,5 @@ class RadioPlayerViewModel(application: Application) : AndroidViewModel(applicat
                 current.copy(playbackStatus = playbackStatus)
             }
         }
-    }
-
-    private fun extractNowPlaying(mediaMetadata: MediaMetadata): String? {
-        val title = mediaMetadata.title?.toString()?.trim()
-        val displayTitle = mediaMetadata.displayTitle?.toString()?.trim()
-        val artist = mediaMetadata.artist?.toString()?.trim()
-        val stationName = stations.firstOrNull { it.id == _uiState.value.activeStationId }?.name
-
-        val resolvedTitle = when {
-            !title.isNullOrBlank() -> title
-            !displayTitle.isNullOrBlank() -> displayTitle
-            else -> null
-        }
-
-        if (!resolvedTitle.isNullOrBlank() && resolvedTitle == stationName) {
-            return null
-        }
-
-        val currentTrack = when {
-            !artist.isNullOrBlank() && !resolvedTitle.isNullOrBlank() -> "$artist - $resolvedTitle"
-            !resolvedTitle.isNullOrBlank() -> resolvedTitle
-            else -> null
-        }
-        
-        // Update history if track changed
-        if (currentTrack != null && currentTrack != _uiState.value.nowPlaying) {
-             _uiState.update { current ->
-                 val newHistory = (listOf(currentTrack) + current.recentlyPlayed)
-                     .distinct()
-                     .take(5)
-                 current.copy(recentlyPlayed = newHistory)
-             }
-        }
-
-        return currentTrack
     }
 }
