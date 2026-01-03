@@ -38,20 +38,24 @@ class PlaybackService : MediaLibraryService() {
                 ?: currentMeta.title?.toString()
 
             val nowPlaying = MetadataHelper.extractNowPlaying(metadata, stationName)
-            if (!nowPlaying.isNullOrBlank()) {
+            if (!nowPlaying.isNullOrBlank() && nowPlaying != currentMeta.title?.toString()) {
                 NowPlayingStore.nowPlaying = nowPlaying
                 mediaLibrarySession?.setSessionExtras(
                     bundleOf(EXTRA_NOW_PLAYING to nowPlaying)
                 )
 
-                // Update Player Metadata to trigger Notification update
+                // Update MediaItem Metadata to trigger Notification update
                 val newMeta = currentMeta.buildUpon()
                     .setTitle(nowPlaying)
-                    .setSubtitle(stationName)
                     .setArtist(stationName)
                     .setStation(stationName) // Ensure station info is preserved
                     .build()
-                player?.mediaMetadata = newMeta
+                
+                val newItem = currentItem.buildUpon()
+                    .setMediaMetadata(newMeta)
+                    .build()
+                
+                player?.replaceMediaItem(player?.currentMediaItemIndex ?: 0, newItem)
             }
         }
     }
