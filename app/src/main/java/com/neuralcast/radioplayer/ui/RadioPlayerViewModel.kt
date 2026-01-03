@@ -8,6 +8,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
+import androidx.media3.common.Metadata
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
@@ -26,6 +27,7 @@ import com.neuralcast.radioplayer.data.SettingsRepository
 import com.neuralcast.radioplayer.data.StationProvider
 import com.neuralcast.radioplayer.model.AppTheme
 import com.neuralcast.radioplayer.model.BufferSize
+import com.neuralcast.radioplayer.playback.PlaybackConstants
 import com.neuralcast.radioplayer.util.MetadataHelper
 
 class RadioPlayerViewModel(application: Application) : AndroidViewModel(application) {
@@ -65,17 +67,7 @@ class RadioPlayerViewModel(application: Application) : AndroidViewModel(applicat
         override fun onMediaMetadataChanged(mediaMetadata: MediaMetadata) {
             val stationName = stations.firstOrNull { it.id == _uiState.value.activeStationId }?.name
             val nowPlaying = MetadataHelper.extractNowPlaying(mediaMetadata, stationName)
-            if (nowPlaying != null) {
-                _uiState.update { current ->
-                    // Update history if track changed
-                    val newHistory = if (nowPlaying != current.nowPlaying) {
-                        (listOf(nowPlaying) + current.recentlyPlayed).distinct().take(5)
-                    } else {
-                        current.recentlyPlayed
-                    }
-                    current.copy(nowPlaying = nowPlaying, recentlyPlayed = newHistory)
-                }
-            }
+            if (nowPlaying != null) updateNowPlaying(nowPlaying)
         }
 
         override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
@@ -85,6 +77,17 @@ class RadioPlayerViewModel(application: Application) : AndroidViewModel(applicat
                     errorMessage = error.message ?: "Playback error"
                 )
             }
+        }
+
+        override fun onMetadata(metadata: Metadata) {
+            val stationName = stations.firstOrNull { it.id == _uiState.value.activeStationId }?.name
+            val nowPlaying = MetadataHelper.extractNowPlaying(metadata, stationName)
+            if (nowPlaying != null) updateNowPlaying(nowPlaying)
+        }
+    }
+    private val controllerListener = object : MediaController.Listener {
+        override fun onExtrasChanged(controller: MediaController, extras: android.os.Bundle) {
+            extras.getString(PlaybackConstants.EXTRA_NOW_PLAYING)?.let(::updateNowPlaying)
         }
     }
 
@@ -181,7 +184,9 @@ class RadioPlayerViewModel(application: Application) : AndroidViewModel(applicat
     private fun connectToSession() {
         val context = getApplication<Application>()
         val sessionToken = SessionToken(context, ComponentName(context, PlaybackService::class.java))
-        val future = MediaController.Builder(context, sessionToken).buildAsync()
+        val future = MediaController.Builder(context, sessionToken)
+            .setListener(controllerListener)
+            .buildAsync()
         controllerFuture = future
 
         future.addListener(
@@ -190,6 +195,9 @@ class RadioPlayerViewModel(application: Application) : AndroidViewModel(applicat
                     val mediaController = future.get()
                     controller = mediaController
                     mediaController.addListener(playerListener)
+                    mediaController.sessionExtras
+                        ?.getString(PlaybackConstants.EXTRA_NOW_PLAYING)
+                        ?.let(::updateNowPlaying)
                     updatePlaybackState()
                     // Sync initial volume
                      _uiState.update { it.copy(volume = mediaController.volume) }
@@ -259,6 +267,17 @@ class RadioPlayerViewModel(application: Application) : AndroidViewModel(applicat
             _uiState.update { current ->
                 current.copy(playbackStatus = playbackStatus)
             }
+        }
+    }
+
+    private fun updateNowPlaying(nowPlaying: String) {
+        _uiState.update { current ->
+            val newHistory = if (nowPlaying != current.nowPlaying) {
+                (listOf(nowPlaying) + current.recentlyPlayed).distinct().take(5)
+            } else {
+                current.recentlyPlayed
+            }
+            current.copy(nowPlaying = nowPlaying, recentlyPlayed = newHistory)
         }
     }
 }

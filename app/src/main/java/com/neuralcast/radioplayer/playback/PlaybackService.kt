@@ -3,10 +3,13 @@ package com.neuralcast.radioplayer.playback
 import android.app.PendingIntent
 import android.content.Intent
 import android.net.Uri
+import androidx.core.os.bundleOf
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
+import androidx.media3.common.Metadata
+import androidx.media3.common.Player
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
@@ -19,10 +22,24 @@ import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 import com.neuralcast.radioplayer.MainActivity
 import com.neuralcast.radioplayer.data.StationProvider
+import com.neuralcast.radioplayer.playback.PlaybackConstants.EXTRA_NOW_PLAYING
+import com.neuralcast.radioplayer.util.MetadataHelper
 
 class PlaybackService : MediaLibraryService() {
     private var player: ExoPlayer? = null
     private var mediaLibrarySession: MediaLibrarySession? = null
+    private val playerMetadataListener = object : Player.Listener {
+        override fun onMetadata(metadata: Metadata) {
+            val stationName = player?.mediaMetadata?.station?.toString()
+                ?: player?.currentMediaItem?.mediaMetadata?.station?.toString()
+            val nowPlaying = MetadataHelper.extractNowPlaying(metadata, stationName)
+            if (!nowPlaying.isNullOrBlank()) {
+                mediaLibrarySession?.setSessionExtras(
+                    bundleOf(EXTRA_NOW_PLAYING to nowPlaying)
+                )
+            }
+        }
+    }
 
     override fun onCreate() {
         super.onCreate()
@@ -60,6 +77,7 @@ class PlaybackService : MediaLibraryService() {
             .build()
 
         player = exoPlayer
+        exoPlayer.addListener(playerMetadataListener)
         setMediaNotificationProvider(StationNotificationProvider(this))
     }
 
@@ -69,6 +87,7 @@ class PlaybackService : MediaLibraryService() {
 
     override fun onDestroy() {
         mediaLibrarySession?.release()
+        player?.removeListener(playerMetadataListener)
         player?.release()
         mediaLibrarySession = null
         player = null
