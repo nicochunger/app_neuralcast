@@ -31,14 +31,27 @@ class PlaybackService : MediaLibraryService() {
     private var mediaLibrarySession: MediaLibrarySession? = null
     private val playerMetadataListener = object : Player.Listener {
         override fun onMetadata(metadata: Metadata) {
+            val currentItem = player?.currentMediaItem ?: return
+            val currentMeta = currentItem.mediaMetadata
             val stationName = player?.mediaMetadata?.station?.toString()
-                ?: player?.currentMediaItem?.mediaMetadata?.station?.toString()
+                ?: currentMeta.station?.toString()
+                ?: currentMeta.title?.toString()
+
             val nowPlaying = MetadataHelper.extractNowPlaying(metadata, stationName)
             if (!nowPlaying.isNullOrBlank()) {
                 NowPlayingStore.nowPlaying = nowPlaying
                 mediaLibrarySession?.setSessionExtras(
                     bundleOf(EXTRA_NOW_PLAYING to nowPlaying)
                 )
+
+                // Update Player Metadata to trigger Notification update
+                val newMeta = currentMeta.buildUpon()
+                    .setTitle(nowPlaying)
+                    .setSubtitle(stationName)
+                    .setArtist(stationName)
+                    .setStation(stationName) // Ensure station info is preserved
+                    .build()
+                player?.mediaMetadata = newMeta
             }
         }
     }
