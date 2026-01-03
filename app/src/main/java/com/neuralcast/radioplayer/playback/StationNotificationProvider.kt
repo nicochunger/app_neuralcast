@@ -9,6 +9,7 @@ class StationNotificationProvider(context: Context) : DefaultMediaNotificationPr
     override fun getNotificationContentTitle(metadata: MediaMetadata): CharSequence? {
         val stationName = metadata.station ?: metadata.subtitle
         val nowPlaying = MetadataHelper.extractNowPlaying(metadata, stationName?.toString())
+            ?: NowPlayingStore.nowPlaying
         return nowPlaying ?: stationName ?: metadata.title
     }
 
@@ -16,6 +17,7 @@ class StationNotificationProvider(context: Context) : DefaultMediaNotificationPr
         // If title is used for "Now Playing", text can be the Station Name
         val stationName = metadata.station ?: metadata.subtitle
         val nowPlaying = MetadataHelper.extractNowPlaying(metadata, stationName?.toString())
+            ?: NowPlayingStore.nowPlaying
         
         return if (nowPlaying != null) {
             stationName ?: metadata.artist ?: metadata.title

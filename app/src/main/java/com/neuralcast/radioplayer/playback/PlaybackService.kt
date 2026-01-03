@@ -23,6 +23,7 @@ import com.google.common.util.concurrent.ListenableFuture
 import com.neuralcast.radioplayer.MainActivity
 import com.neuralcast.radioplayer.data.StationProvider
 import com.neuralcast.radioplayer.playback.PlaybackConstants.EXTRA_NOW_PLAYING
+import com.neuralcast.radioplayer.playback.NowPlayingStore
 import com.neuralcast.radioplayer.util.MetadataHelper
 
 class PlaybackService : MediaLibraryService() {
@@ -34,6 +35,7 @@ class PlaybackService : MediaLibraryService() {
                 ?: player?.currentMediaItem?.mediaMetadata?.station?.toString()
             val nowPlaying = MetadataHelper.extractNowPlaying(metadata, stationName)
             if (!nowPlaying.isNullOrBlank()) {
+                NowPlayingStore.nowPlaying = nowPlaying
                 mediaLibrarySession?.setSessionExtras(
                     bundleOf(EXTRA_NOW_PLAYING to nowPlaying)
                 )
