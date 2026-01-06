@@ -56,7 +56,9 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import java.text.DateFormat
 import com.neuralcast.radioplayer.model.PlaybackStatus
+import com.neuralcast.radioplayer.model.PlaybackHistoryEntry
 import com.neuralcast.radioplayer.model.RadioStation
 import com.neuralcast.radioplayer.model.UiState
 
@@ -82,7 +84,18 @@ fun RadioScreen(
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text(text = "NeuralCast Radio") },
+                title = {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(text = "NeuralCast Radio")
+                        AnimatedVisibility(visible = uiState.sleepTimerRemaining != null) {
+                            Text(
+                                text = "Sleep timer: ${formatSleepTimer(uiState.sleepTimerRemaining ?: 0L)}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+                },
                 navigationIcon = {
                     IconButton(onClick = onSettingsClick) {
                         Icon(
@@ -126,12 +139,20 @@ fun RadioScreen(
                         modifier = Modifier.padding(top = 8.dp, bottom = 4.dp, start = 8.dp)
                     )
                 }
-                items(uiState.recentlyPlayed) { track ->
-                    HistoryItem(track = track)
+                items(uiState.recentlyPlayed, key = { "${it.track}-${it.playedAt}" }) { entry ->
+                    HistoryItem(entry = entry)
                 }
             }
         }
     }
+}
+
+private fun formatSleepTimer(remainingMillis: Long): String {
+    val clampedMillis = remainingMillis.coerceAtLeast(0L)
+    val totalSeconds = clampedMillis / 1000
+    val minutes = totalSeconds / 60
+    val seconds = totalSeconds % 60
+    return "%d:%02d".format(minutes, seconds)
 }
 
 @Composable
@@ -177,7 +198,8 @@ private fun SleepTimerMenu(
 }
 
 @Composable
-private fun HistoryItem(track: String) {
+private fun HistoryItem(entry: PlaybackHistoryEntry) {
+    val timeFormatter = remember { DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT) }
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -190,14 +212,22 @@ private fun HistoryItem(track: String) {
             modifier = Modifier.size(16.dp),
             tint = MaterialTheme.colorScheme.onSurfaceVariant
         )
-        Text(
-            text = track,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(start = 12.dp),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
+        Column(
+            modifier = Modifier.padding(start = 12.dp)
+        ) {
+            Text(
+                text = entry.track,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = timeFormatter.format(entry.playedAt),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+            )
+        }
     }
 }
 
