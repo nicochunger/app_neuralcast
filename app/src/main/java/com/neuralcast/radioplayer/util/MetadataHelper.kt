@@ -43,8 +43,10 @@ object MetadataHelper {
             return null
         }
 
+        val effectiveArtist = if (artist != null && artist.equals(currentStationName, ignoreCase = true)) null else artist
+
         return when {
-            !artist.isNullOrBlank() && !resolvedTitle.isNullOrBlank() -> "$artist - $resolvedTitle"
+            !effectiveArtist.isNullOrBlank() && !resolvedTitle.isNullOrBlank() -> "$effectiveArtist - $resolvedTitle"
             !resolvedTitle.isNullOrBlank() -> resolvedTitle
             else -> null
         }
