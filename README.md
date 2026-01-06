@@ -1,6 +1,6 @@
-# NeuralCast Radio
+# NeuralCast
 
-NeuralCast Radio is a modern Android application for streaming curated web radio stations. Built with Kotlin, Jetpack Compose, and AndroidX Media3, it delivers a clean Material 3 interface with reliable background playback and system media integration.
+NeuralCast is a modern Android application for streaming curated web radio stations. Built with Kotlin, Jetpack Compose, and AndroidX Media3, it delivers a clean Material 3 interface with reliable background playback and system media integration.
 
 ## Features
 

@@ -1,6 +1,6 @@
-# NeuralCast Radio
+# NeuralCast
 
-**NeuralCast Radio** is a modern Android application designed for streaming specific web radio stations. It is built using **Kotlin** and **Jetpack Compose**, leveraging **Material Design 3** for a sleek, native UI. The app uses **AndroidX Media3 (ExoPlayer)** for robust media playback and seamless system integration (background playback, notifications).
+**NeuralCast** is a modern Android application designed for streaming specific web radio stations. It is built using **Kotlin** and **Jetpack Compose**, leveraging **Material Design 3** for a sleek, native UI. The app uses **AndroidX Media3 (ExoPlayer)** for robust media playback and seamless system integration (background playback, notifications).
 
 ## Project Overview
 

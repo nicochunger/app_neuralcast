@@ -91,7 +91,7 @@ fun RadioScreen(
             CenterAlignedTopAppBar(
                 title = {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(text = "NeuralCast Radio")
+                        Text(text = "NeuralCast")
                         AnimatedVisibility(visible = uiState.sleepTimerRemaining != null) {
                             Text(
                                 text = "Sleep timer: ${formatSleepTimer(uiState.sleepTimerRemaining ?: 0L)}",
