@@ -87,7 +87,18 @@ fun RadioScreen(
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text(text = "NeuralCast Radio") },
+                title = {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(text = "NeuralCast Radio")
+                        AnimatedVisibility(visible = uiState.sleepTimerRemaining != null) {
+                            Text(
+                                text = "Sleep timer: ${formatSleepTimer(uiState.sleepTimerRemaining ?: 0L)}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+                },
                 navigationIcon = {
                     IconButton(onClick = onSettingsClick) {
                         Icon(
@@ -167,6 +178,14 @@ fun RadioScreen(
             }
         }
     }
+}
+
+private fun formatSleepTimer(remainingMillis: Long): String {
+    val clampedMillis = remainingMillis.coerceAtLeast(0L)
+    val totalSeconds = clampedMillis / 1000
+    val minutes = totalSeconds / 60
+    val seconds = totalSeconds % 60
+    return "%d:%02d".format(minutes, seconds)
 }
 
 @Composable
