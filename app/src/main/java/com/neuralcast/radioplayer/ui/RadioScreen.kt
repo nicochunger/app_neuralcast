@@ -20,11 +20,13 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Timer
+import androidx.compose.material3.BottomAppBar
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -37,6 +39,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
@@ -56,7 +60,9 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import java.text.DateFormat
 import com.neuralcast.radioplayer.model.PlaybackStatus
+import com.neuralcast.radioplayer.model.PlaybackHistoryEntry
 import com.neuralcast.radioplayer.model.RadioStation
 import com.neuralcast.radioplayer.model.UiState
 
@@ -65,6 +71,7 @@ import com.neuralcast.radioplayer.model.UiState
 fun RadioScreen(
     uiState: UiState,
     onPlayToggle: (RadioStation) -> Unit,
+    onVolumeChange: (Float) -> Unit,
     onSleepTimerSet: (Int?) -> Unit,
     onErrorShown: () -> Unit,
     onSettingsClick: () -> Unit
@@ -82,7 +89,18 @@ fun RadioScreen(
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text(text = "NeuralCast Radio") },
+                title = {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(text = "NeuralCast Radio")
+                        AnimatedVisibility(visible = uiState.sleepTimerRemaining != null) {
+                            Text(
+                                text = "Sleep timer: ${formatSleepTimer(uiState.sleepTimerRemaining ?: 0L)}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+                },
                 navigationIcon = {
                     IconButton(onClick = onSettingsClick) {
                         Icon(
@@ -98,6 +116,36 @@ fun RadioScreen(
                     )
                 }
             )
+        },
+        bottomBar = {
+            BottomAppBar(
+                containerColor = MaterialTheme.colorScheme.surfaceContainer,
+                contentPadding = PaddingValues(horizontal = 16.dp)
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.VolumeUp,
+                        contentDescription = "Volume",
+                        tint = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Slider(
+                        value = uiState.volume,
+                        onValueChange = onVolumeChange,
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(horizontal = 16.dp),
+                        colors = SliderDefaults.colors(
+                            thumbColor = MaterialTheme.colorScheme.primary,
+                            activeTrackColor = MaterialTheme.colorScheme.primary,
+                            inactiveTrackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
+                        )
+                    )
+                }
+            }
         },
         snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { paddingValues ->
@@ -126,12 +174,20 @@ fun RadioScreen(
                         modifier = Modifier.padding(top = 8.dp, bottom = 4.dp, start = 8.dp)
                     )
                 }
-                items(uiState.recentlyPlayed) { track ->
-                    HistoryItem(track = track)
+                items(uiState.recentlyPlayed, key = { "${it.track}-${it.playedAt}" }) { entry ->
+                    HistoryItem(entry = entry)
                 }
             }
         }
     }
+}
+
+private fun formatSleepTimer(remainingMillis: Long): String {
+    val clampedMillis = remainingMillis.coerceAtLeast(0L)
+    val totalSeconds = clampedMillis / 1000
+    val minutes = totalSeconds / 60
+    val seconds = totalSeconds % 60
+    return "%d:%02d".format(minutes, seconds)
 }
 
 @Composable
@@ -177,7 +233,8 @@ private fun SleepTimerMenu(
 }
 
 @Composable
-private fun HistoryItem(track: String) {
+private fun HistoryItem(entry: PlaybackHistoryEntry) {
+    val timeFormatter = remember { DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT) }
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -190,14 +247,22 @@ private fun HistoryItem(track: String) {
             modifier = Modifier.size(16.dp),
             tint = MaterialTheme.colorScheme.onSurfaceVariant
         )
-        Text(
-            text = track,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(start = 12.dp),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
+        Column(
+            modifier = Modifier.padding(start = 12.dp)
+        ) {
+            Text(
+                text = entry.track,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = timeFormatter.format(entry.playedAt),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+            )
+        }
     }
 }
 
