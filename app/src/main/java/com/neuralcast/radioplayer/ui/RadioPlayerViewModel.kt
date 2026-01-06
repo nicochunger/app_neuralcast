@@ -27,6 +27,7 @@ import com.neuralcast.radioplayer.data.SettingsRepository
 import com.neuralcast.radioplayer.data.StationProvider
 import com.neuralcast.radioplayer.model.AppTheme
 import com.neuralcast.radioplayer.model.BufferSize
+import com.neuralcast.radioplayer.model.PlaybackHistoryEntry
 import com.neuralcast.radioplayer.playback.PlaybackConstants
 import com.neuralcast.radioplayer.util.MetadataHelper
 
@@ -62,6 +63,7 @@ class RadioPlayerViewModel(application: Application) : AndroidViewModel(applicat
             _uiState.update { current ->
                 current.copy(activeStationId = stationId, nowPlaying = null)
             }
+            persistActiveStationId(stationId)
         }
 
         override fun onMediaMetadataChanged(mediaMetadata: MediaMetadata) {
@@ -103,6 +105,23 @@ class RadioPlayerViewModel(application: Application) : AndroidViewModel(applicat
                 // If the player is not connected, we might want to initialize volume from prefs.
                 if (controller == null) {
                      _uiState.update { it.copy(volume = prefs.defaultVolume) }
+                }
+            }
+        }
+        viewModelScope.launch {
+            settingsRepository.playbackState.collect { snapshot ->
+                val activeStationId = snapshot.activeStationId
+                    ?.takeIf { stationId -> stations.any { it.id == stationId } }
+                _uiState.update { current ->
+                    val resolvedActiveStationId = if (current.activeStationId == null) {
+                        activeStationId
+                    } else {
+                        current.activeStationId
+                    }
+                    current.copy(
+                        activeStationId = resolvedActiveStationId,
+                        recentlyPlayed = snapshot.recentlyPlayed
+                    )
                 }
             }
         }
@@ -237,6 +256,7 @@ class RadioPlayerViewModel(application: Application) : AndroidViewModel(applicat
                 errorMessage = null
             )
         }
+        persistActiveStationId(station.id)
     }
 
     private fun stopPlayback(mediaController: MediaController) {
@@ -251,6 +271,7 @@ class RadioPlayerViewModel(application: Application) : AndroidViewModel(applicat
                 nowPlaying = null
             )
         }
+        persistActiveStationId(null)
     }
 
     private fun updatePlaybackState() {
@@ -271,13 +292,30 @@ class RadioPlayerViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     private fun updateNowPlaying(nowPlaying: String) {
+        val timestamp = System.currentTimeMillis()
         _uiState.update { current ->
             val newHistory = if (nowPlaying != current.nowPlaying) {
-                (listOf(nowPlaying) + current.recentlyPlayed).distinct().take(5)
+                val newEntry = PlaybackHistoryEntry(track = nowPlaying, playedAt = timestamp)
+                (listOf(newEntry) + current.recentlyPlayed.filterNot { it.track == nowPlaying })
+                    .take(5)
             } else {
                 current.recentlyPlayed
             }
             current.copy(nowPlaying = nowPlaying, recentlyPlayed = newHistory)
+        }
+        persistRecentlyPlayed()
+    }
+
+    private fun persistActiveStationId(activeStationId: String?) {
+        viewModelScope.launch {
+            settingsRepository.setActiveStationId(activeStationId)
+        }
+    }
+
+    private fun persistRecentlyPlayed() {
+        val history = _uiState.value.recentlyPlayed
+        viewModelScope.launch {
+            settingsRepository.setRecentlyPlayed(history)
         }
     }
 }

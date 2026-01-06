@@ -16,6 +16,11 @@ enum class PlaybackStatus {
     Error
 }
 
+data class PlaybackHistoryEntry(
+    val track: String,
+    val playedAt: Long
+)
+
 data class UiState(
     val stations: List<RadioStation> = emptyList(),
     val activeStationId: String? = null,
@@ -24,6 +29,6 @@ data class UiState(
     val errorMessage: String? = null,
     val volume: Float = 1.0f,
     val sleepTimerRemaining: Long? = null,
-    val recentlyPlayed: List<String> = emptyList(),
+    val recentlyPlayed: List<PlaybackHistoryEntry> = emptyList(),
     val appPreferences: AppPreferences = AppPreferences()
 )
