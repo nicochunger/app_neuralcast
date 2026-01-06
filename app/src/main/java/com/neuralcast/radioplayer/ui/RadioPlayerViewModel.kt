@@ -16,7 +16,6 @@ import com.neuralcast.radioplayer.model.PlaybackStatus
 import com.neuralcast.radioplayer.model.RadioStation
 import com.neuralcast.radioplayer.model.UiState
 import com.neuralcast.radioplayer.playback.PlaybackService
-import com.neuralcast.radioplayer.R
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -98,12 +97,6 @@ class RadioPlayerViewModel(application: Application) : AndroidViewModel(applicat
         viewModelScope.launch {
             settingsRepository.preferences.collect { prefs ->
                 _uiState.update { it.copy(appPreferences = prefs) }
-                // Apply volume if not set by user yet? Or just respect what the slider says.
-                // The slider is bound to uiState.volume.
-                // If the player is not connected, we might want to initialize volume from prefs.
-                if (controller == null) {
-                     _uiState.update { it.copy(volume = prefs.defaultVolume) }
-                }
             }
         }
     }
@@ -114,10 +107,6 @@ class RadioPlayerViewModel(application: Application) : AndroidViewModel(applicat
 
     fun saveBufferSize(size: BufferSize) {
         viewModelScope.launch { settingsRepository.setBufferSize(size) }
-    }
-
-    fun saveDefaultVolume(volume: Float) {
-        viewModelScope.launch { settingsRepository.setDefaultVolume(volume) }
     }
 
     fun onPlayToggle(station: RadioStation) {
@@ -137,11 +126,6 @@ class RadioPlayerViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
     
-    fun setVolume(volume: Float) {
-        controller?.volume = volume
-        _uiState.update { it.copy(volume = volume) }
-    }
-
     fun setSleepTimer(minutes: Int?) {
         sleepTimerJob?.cancel()
         
@@ -199,8 +183,6 @@ class RadioPlayerViewModel(application: Application) : AndroidViewModel(applicat
                         ?.getString(PlaybackConstants.EXTRA_NOW_PLAYING)
                         ?.let(::updateNowPlaying)
                     updatePlaybackState()
-                    // Sync initial volume
-                     _uiState.update { it.copy(volume = mediaController.volume) }
                 } catch (error: Exception) {
                     _uiState.update { current ->
                         current.copy(errorMessage = "Unable to connect to player.")

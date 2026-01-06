@@ -22,7 +22,6 @@ data class UiState(
     val playbackStatus: PlaybackStatus = PlaybackStatus.Idle,
     val nowPlaying: String? = null,
     val errorMessage: String? = null,
-    val volume: Float = 1.0f,
     val sleepTimerRemaining: Long? = null,
     val recentlyPlayed: List<String> = emptyList(),
     val appPreferences: AppPreferences = AppPreferences()
