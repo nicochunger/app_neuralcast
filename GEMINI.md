@@ -25,7 +25,15 @@
 
 The project is primarily built and managed using **Android Studio**.
 
-**Note for AI Agent:** Do not attempt to run build commands (e.g., `./gradlew ...`) yourself. The user handles all builds, deployments, and testing within Android Studio. Focus strictly on code analysis, architectural suggestions, and file modifications.
+### Agent Testing Guidance
+
+When changes touch Kotlin, Jetpack Compose UI, or Gradle files, run the following from the repo root:
+
+*   `./gradlew :app:assembleDebug` (compile/app build check)
+*   `./gradlew :app:testDebugUnitTest` (unit tests only)
+*   Optional: `./gradlew :app:lintDebug` (static analysis)
+
+Android Studio is still required for emulator/instrumented tests. Skip instrumented tests unless explicitly requested; CI-style Gradle checks are expected for agent changes.
 
 ### Prerequisites
 *   Android Studio (latest stable version).
