@@ -4,11 +4,6 @@ enum class AppTheme {
     SYSTEM, LIGHT, DARK
 }
 
-enum class BufferSize {
-    NORMAL, LARGE
-}
-
 data class AppPreferences(
-    val theme: AppTheme = AppTheme.SYSTEM,
-    val bufferSize: BufferSize = BufferSize.NORMAL
+    val theme: AppTheme = AppTheme.SYSTEM
 )

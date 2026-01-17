@@ -57,7 +57,6 @@ class MainActivity : ComponentActivity() {
                         SettingsScreen(
                             appPreferences = uiState.appPreferences,
                             onThemeChanged = viewModel::saveTheme,
-                            onBufferSizeChanged = viewModel::saveBufferSize,
                             onNavigateBack = { navController.popBackStack() }
                         )
                     }

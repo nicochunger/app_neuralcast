@@ -24,14 +24,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.neuralcast.radioplayer.model.AppPreferences
 import com.neuralcast.radioplayer.model.AppTheme
-import com.neuralcast.radioplayer.model.BufferSize
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     appPreferences: AppPreferences,
     onThemeChanged: (AppTheme) -> Unit,
-    onBufferSizeChanged: (BufferSize) -> Unit,
     onNavigateBack: () -> Unit
 ) {
     Scaffold(
@@ -82,36 +80,7 @@ fun SettingsScreen(
                 }
             }
 
-            // Buffer Size Setting
-            Column {
-                Text(
-                    text = "Buffer Size",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                Text(
-                    text = "Restart playback to apply changes.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                BufferSize.values().forEach { size ->
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        RadioButton(
-                            selected = size == appPreferences.bufferSize,
-                            onClick = { onBufferSizeChanged(size) }
-                        )
-                        Text(
-                            text = size.name.lowercase().capitalize(),
-                            style = MaterialTheme.typography.bodyLarge,
-                            modifier = Modifier.padding(start = 8.dp)
-                        )
-                    }
-                }
-            }
+
 
         }
     }

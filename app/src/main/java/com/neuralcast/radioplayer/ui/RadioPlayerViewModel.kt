@@ -26,7 +26,6 @@ import kotlinx.coroutines.launch
 import com.neuralcast.radioplayer.data.SettingsRepository
 import com.neuralcast.radioplayer.data.StationProvider
 import com.neuralcast.radioplayer.model.AppTheme
-import com.neuralcast.radioplayer.model.BufferSize
 import com.neuralcast.radioplayer.model.PlaybackHistoryEntry
 import com.neuralcast.radioplayer.playback.PlaybackConstants
 import com.neuralcast.radioplayer.util.MetadataHelper
@@ -125,9 +124,7 @@ class RadioPlayerViewModel(application: Application) : AndroidViewModel(applicat
         viewModelScope.launch { settingsRepository.setTheme(theme) }
     }
 
-    fun saveBufferSize(size: BufferSize) {
-        viewModelScope.launch { settingsRepository.setBufferSize(size) }
-    }
+
 
 
     fun onPlayToggle(station: RadioStation) {

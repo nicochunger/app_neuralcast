@@ -9,7 +9,6 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.neuralcast.radioplayer.model.AppPreferences
 import com.neuralcast.radioplayer.model.AppTheme
-import com.neuralcast.radioplayer.model.BufferSize
 import com.neuralcast.radioplayer.model.PlaybackHistoryEntry
 import org.json.JSONArray
 import org.json.JSONObject
@@ -21,14 +20,12 @@ private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(na
 class SettingsRepository(private val context: Context) {
 
     private val THEME_KEY = stringPreferencesKey("theme")
-    private val BUFFER_SIZE_KEY = stringPreferencesKey("buffer_size")
     private val ACTIVE_STATION_KEY = stringPreferencesKey("active_station_id")
     private val RECENTLY_PLAYED_KEY = stringPreferencesKey("recently_played_json")
 
     val preferences: Flow<AppPreferences> = context.dataStore.data.map { prefs ->
         AppPreferences(
-            theme = AppTheme.valueOf(prefs[THEME_KEY] ?: AppTheme.SYSTEM.name),
-            bufferSize = BufferSize.valueOf(prefs[BUFFER_SIZE_KEY] ?: BufferSize.NORMAL.name)
+            theme = AppTheme.valueOf(prefs[THEME_KEY] ?: AppTheme.SYSTEM.name)
         )
     }
 
@@ -45,11 +42,7 @@ class SettingsRepository(private val context: Context) {
         }
     }
 
-    suspend fun setBufferSize(size: BufferSize) {
-        context.dataStore.edit { prefs ->
-            prefs[BUFFER_SIZE_KEY] = size.name
-        }
-    }
+
 
 
     suspend fun setActiveStationId(activeStationId: String?) {
