@@ -5,12 +5,13 @@ plugins {
 
 android {
     namespace = "com.neuralcast.radioplayer"
-    compileSdk = 34
+    compileSdk = 36
+    buildToolsVersion = "36.0.0"
 
     defaultConfig {
         applicationId = "com.neuralcast.radioplayer"
         minSdk = 24
-        targetSdk = 34
+        targetSdk = 36
         versionCode = 1
         versionName = "1.0"
     }
