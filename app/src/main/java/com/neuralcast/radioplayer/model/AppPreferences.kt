@@ -10,6 +10,5 @@ enum class BufferSize {
 
 data class AppPreferences(
     val theme: AppTheme = AppTheme.SYSTEM,
-    val bufferSize: BufferSize = BufferSize.NORMAL,
-    val defaultVolume: Float = 1.0f
+    val bufferSize: BufferSize = BufferSize.NORMAL
 )

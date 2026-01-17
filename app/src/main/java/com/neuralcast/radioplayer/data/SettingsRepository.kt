@@ -22,15 +22,13 @@ class SettingsRepository(private val context: Context) {
 
     private val THEME_KEY = stringPreferencesKey("theme")
     private val BUFFER_SIZE_KEY = stringPreferencesKey("buffer_size")
-    private val VOLUME_KEY = floatPreferencesKey("default_volume")
     private val ACTIVE_STATION_KEY = stringPreferencesKey("active_station_id")
     private val RECENTLY_PLAYED_KEY = stringPreferencesKey("recently_played_json")
 
     val preferences: Flow<AppPreferences> = context.dataStore.data.map { prefs ->
         AppPreferences(
             theme = AppTheme.valueOf(prefs[THEME_KEY] ?: AppTheme.SYSTEM.name),
-            bufferSize = BufferSize.valueOf(prefs[BUFFER_SIZE_KEY] ?: BufferSize.NORMAL.name),
-            defaultVolume = prefs[VOLUME_KEY] ?: 1.0f
+            bufferSize = BufferSize.valueOf(prefs[BUFFER_SIZE_KEY] ?: BufferSize.NORMAL.name)
         )
     }
 
@@ -53,11 +51,6 @@ class SettingsRepository(private val context: Context) {
         }
     }
 
-    suspend fun setDefaultVolume(volume: Float) {
-        context.dataStore.edit { prefs ->
-            prefs[VOLUME_KEY] = volume
-        }
-    }
 
     suspend fun setActiveStationId(activeStationId: String?) {
         context.dataStore.edit { prefs ->

@@ -48,7 +48,6 @@ class MainActivity : ComponentActivity() {
                         RadioScreen(
                             uiState = uiState,
                             onPlayToggle = { station -> viewModel.onPlayToggle(station) },
-                            onVolumeChange = viewModel::setVolume,
                             onSleepTimerSet = viewModel::setSleepTimer,
                             onErrorShown = viewModel::onErrorShown,
                             onSettingsClick = { navController.navigate("settings") }
@@ -59,7 +58,6 @@ class MainActivity : ComponentActivity() {
                             appPreferences = uiState.appPreferences,
                             onThemeChanged = viewModel::saveTheme,
                             onBufferSizeChanged = viewModel::saveBufferSize,
-                            onDefaultVolumeChanged = viewModel::saveDefaultVolume,
                             onNavigateBack = { navController.popBackStack() }
                         )
                     }
