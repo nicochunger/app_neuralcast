@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -21,7 +22,9 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Timer
@@ -30,17 +33,21 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CenterAlignedTopAppBar
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -56,17 +63,23 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import java.text.DateFormat
-import com.neuralcast.radioplayer.model.PlaybackStatus
+import androidx.compose.ui.window.Dialog
 import com.neuralcast.radioplayer.model.PlaybackHistoryEntry
+import com.neuralcast.radioplayer.model.PlaybackStatus
 import com.neuralcast.radioplayer.model.RadioStation
+import com.neuralcast.radioplayer.model.RequestableSong
+import com.neuralcast.radioplayer.model.SongRequestState
 import com.neuralcast.radioplayer.model.UiState
+import java.text.DateFormat
 
 @Composable
 @OptIn(ExperimentalMaterial3Api::class)
 fun RadioScreen(
     uiState: UiState,
     onPlayToggle: (RadioStation) -> Unit,
+    onSongRequestClick: (RadioStation) -> Unit,
+    onSongRequestSubmit: (RequestableSong) -> Unit,
+    onSongRequestDismiss: () -> Unit,
     onSleepTimerSet: (Int?) -> Unit,
     onErrorShown: () -> Unit,
     onSettingsClick: () -> Unit
@@ -128,7 +141,8 @@ fun RadioScreen(
                     isActive = station.id == uiState.activeStationId,
                     playbackStatus = uiState.playbackStatus,
                     nowPlaying = if (station.id == uiState.activeStationId) uiState.nowPlaying else null,
-                    onPlayToggle = { onPlayToggle(station) }
+                    onPlayToggle = { onPlayToggle(station) },
+                    onSongRequestClick = { onSongRequestClick(station) }
                 )
             }
 
@@ -146,6 +160,12 @@ fun RadioScreen(
             }
         }
     }
+
+    SongRequestDialog(
+        requestState = uiState.songRequestState,
+        onRequestSong = onSongRequestSubmit,
+        onDismiss = onSongRequestDismiss
+    )
 }
 
 private fun formatSleepTimer(remainingMillis: Long): String {
@@ -238,7 +258,8 @@ private fun StationCard(
     isActive: Boolean,
     playbackStatus: PlaybackStatus,
     nowPlaying: String?,
-    onPlayToggle: () -> Unit
+    onPlayToggle: () -> Unit,
+    onSongRequestClick: () -> Unit
 ) {
     val cardShape = RoundedCornerShape(28.dp)
     val overlayBrush = Brush.verticalGradient(
@@ -347,35 +368,213 @@ private fun StationCard(
                         )
                     }
                     
-                    Button(
-                        onClick = onPlayToggle,
-                        modifier = Modifier.align(Alignment.End),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
-                            contentColor = MaterialTheme.colorScheme.onSurface
-                        ),
-                        shape = RoundedCornerShape(999.dp)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End)
                     ) {
-                        if (isActive && playbackStatus != PlaybackStatus.Idle) {
+                        OutlinedButton(
+                            onClick = onSongRequestClick,
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = Color.White
+                            ),
+                            shape = RoundedCornerShape(999.dp)
+                        ) {
                             Icon(
-                                imageVector = Icons.Default.Stop,
-                                contentDescription = "Stop ${station.name}"
+                                imageVector = Icons.Default.LibraryMusic,
+                                contentDescription = "Request song for ${station.name}"
                             )
                             Text(
-                                text = "Stop",
-                                modifier = Modifier.padding(start = 8.dp)
-                            )
-                        } else {
-                            Icon(
-                                imageVector = Icons.Default.PlayArrow,
-                                contentDescription = "Play ${station.name}"
-                            )
-                            Text(
-                                text = "Play",
+                                text = "Request Song",
                                 modifier = Modifier.padding(start = 8.dp)
                             )
                         }
+
+                        Button(
+                            onClick = onPlayToggle,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
+                                contentColor = MaterialTheme.colorScheme.onSurface
+                            ),
+                            shape = RoundedCornerShape(999.dp)
+                        ) {
+                            if (isActive && playbackStatus != PlaybackStatus.Idle) {
+                                Icon(
+                                    imageVector = Icons.Default.Stop,
+                                    contentDescription = "Stop ${station.name}"
+                                )
+                                Text(
+                                    text = "Stop",
+                                    modifier = Modifier.padding(start = 8.dp)
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = Icons.Default.PlayArrow,
+                                    contentDescription = "Play ${station.name}"
+                                )
+                                Text(
+                                    text = "Play",
+                                    modifier = Modifier.padding(start = 8.dp)
+                                )
+                            }
+                        }
                     }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SongRequestDialog(
+    requestState: SongRequestState,
+    onRequestSong: (RequestableSong) -> Unit,
+    onDismiss: () -> Unit
+) {
+    if (!requestState.isVisible) return
+
+    var query by remember(requestState.stationId) { mutableStateOf("") }
+    val filteredSongs = remember(query, requestState.songs) {
+        if (query.isBlank()) {
+            requestState.songs
+        } else {
+            requestState.songs.filter { song ->
+                song.displayText.contains(query, ignoreCase = true)
+            }
+        }
+    }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(24.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    text = "Request a Song",
+                    style = MaterialTheme.typography.titleLarge
+                )
+                Text(
+                    text = requestState.stationName,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                when {
+                    requestState.isLoading -> {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            CircularProgressIndicator(modifier = Modifier.size(28.dp))
+                        }
+                    }
+
+                    requestState.songs.isEmpty() -> {
+                        Text(
+                            text = "No songs are currently available for request.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+
+                    else -> {
+                        OutlinedTextField(
+                            value = query,
+                            onValueChange = { query = it },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                            label = { Text("Search songs") },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.Default.Search,
+                                    contentDescription = null
+                                )
+                            }
+                        )
+
+                        LazyColumn(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(max = 360.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            if (filteredSongs.isEmpty()) {
+                                item {
+                                    Text(
+                                        text = "No songs matched your search.",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            } else {
+                                items(filteredSongs, key = { it.requestId }) { song ->
+                                    RequestSongItem(
+                                        song = song,
+                                        isSubmitting = requestState.submittingRequestId == song.requestId,
+                                        isAnySubmissionInProgress = requestState.submittingRequestId != null,
+                                        onRequestSong = onRequestSong
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    TextButton(onClick = onDismiss) {
+                        Text("Close")
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RequestSongItem(
+    song: RequestableSong,
+    isSubmitting: Boolean,
+    isAnySubmissionInProgress: Boolean,
+    onRequestSong: (RequestableSong) -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLowest
+        )
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = song.displayText,
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.bodyMedium,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+            TextButton(
+                onClick = { onRequestSong(song) },
+                enabled = !isAnySubmissionInProgress
+            ) {
+                if (isSubmitting) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        strokeWidth = 2.dp
+                    )
+                } else {
+                    Text("Request")
                 }
             }
         }

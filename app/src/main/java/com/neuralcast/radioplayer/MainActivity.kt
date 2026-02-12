@@ -48,6 +48,9 @@ class MainActivity : ComponentActivity() {
                         RadioScreen(
                             uiState = uiState,
                             onPlayToggle = { station -> viewModel.onPlayToggle(station) },
+                            onSongRequestClick = { station -> viewModel.onSongRequestClick(station) },
+                            onSongRequestSubmit = viewModel::onSongRequestSubmit,
+                            onSongRequestDismiss = viewModel::onSongRequestDismiss,
                             onSleepTimerSet = viewModel::setSleepTimer,
                             onErrorShown = viewModel::onErrorShown,
                             onSettingsClick = { navController.navigate("settings") }

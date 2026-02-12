@@ -12,26 +12,28 @@ import androidx.media3.common.Metadata
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
+import com.neuralcast.radioplayer.data.SettingsRepository
+import com.neuralcast.radioplayer.data.SongRequestRepository
+import com.neuralcast.radioplayer.data.StationProvider
 import com.neuralcast.radioplayer.model.PlaybackStatus
+import com.neuralcast.radioplayer.model.RequestableSong
 import com.neuralcast.radioplayer.model.RadioStation
+import com.neuralcast.radioplayer.model.SongRequestState
 import com.neuralcast.radioplayer.model.UiState
 import com.neuralcast.radioplayer.playback.PlaybackService
-import com.neuralcast.radioplayer.R
+import com.neuralcast.radioplayer.model.AppTheme
+import com.neuralcast.radioplayer.model.PlaybackHistoryEntry
+import com.neuralcast.radioplayer.playback.PlaybackConstants
+import com.neuralcast.radioplayer.util.MetadataHelper
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
-import com.neuralcast.radioplayer.data.SettingsRepository
-import com.neuralcast.radioplayer.data.StationProvider
-import com.neuralcast.radioplayer.model.AppTheme
-import com.neuralcast.radioplayer.model.PlaybackHistoryEntry
-import com.neuralcast.radioplayer.playback.PlaybackConstants
-import com.neuralcast.radioplayer.util.MetadataHelper
-
 class RadioPlayerViewModel(application: Application) : AndroidViewModel(application) {
     private val settingsRepository = SettingsRepository(application)
+    private val songRequestRepository = SongRequestRepository()
     private val stations = StationProvider.stations
 
     private val _uiState = MutableStateFlow(
@@ -143,11 +145,105 @@ class RadioPlayerViewModel(application: Application) : AndroidViewModel(applicat
             startPlayback(mediaController, station)
         }
     }
-    
+
+    fun onSongRequestClick(station: RadioStation) {
+        _uiState.update { current ->
+            current.copy(
+                songRequestState = SongRequestState(
+                    stationId = station.id,
+                    stationName = station.name,
+                    isLoading = true
+                )
+            )
+        }
+
+        viewModelScope.launch {
+            runCatching {
+                songRequestRepository.getRequestableSongs(station)
+            }.onSuccess { songs ->
+                _uiState.update { current ->
+                    if (current.songRequestState.stationId != station.id) {
+                        current
+                    } else {
+                        current.copy(
+                            songRequestState = current.songRequestState.copy(
+                                isLoading = false,
+                                songs = songs
+                            )
+                        )
+                    }
+                }
+            }.onFailure { error ->
+                _uiState.update { current ->
+                    if (current.songRequestState.stationId != station.id) {
+                        current
+                    } else {
+                        current.copy(
+                            songRequestState = current.songRequestState.copy(
+                                isLoading = false,
+                                songs = emptyList(),
+                                submittingRequestId = null
+                            ),
+                            errorMessage = error.message ?: "Unable to load requestable songs."
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    fun onSongRequestSubmit(song: RequestableSong) {
+        val requestState = _uiState.value.songRequestState
+        if (requestState.submittingRequestId != null) {
+            return
+        }
+
+        val station = stations.firstOrNull { it.id == requestState.stationId }
+        if (station == null) {
+            _uiState.update { current ->
+                current.copy(errorMessage = "Station not found for song request.")
+            }
+            return
+        }
+
+        _uiState.update { current ->
+            current.copy(
+                songRequestState = current.songRequestState.copy(
+                    submittingRequestId = song.requestId
+                )
+            )
+        }
+
+        viewModelScope.launch {
+            runCatching {
+                songRequestRepository.submitSongRequest(station, song)
+            }.onSuccess { message ->
+                _uiState.update { current ->
+                    current.copy(
+                        songRequestState = SongRequestState(),
+                        errorMessage = message
+                    )
+                }
+            }.onFailure { error ->
+                _uiState.update { current ->
+                    current.copy(
+                        songRequestState = current.songRequestState.copy(submittingRequestId = null),
+                        errorMessage = error.message ?: "Unable to submit song request."
+                    )
+                }
+            }
+        }
+    }
+
+    fun onSongRequestDismiss() {
+        _uiState.update { current ->
+            current.copy(songRequestState = SongRequestState())
+        }
+    }
 
     fun setSleepTimer(minutes: Int?) {
         sleepTimerJob?.cancel()
-        
+
         if (minutes == null) {
             _uiState.update { it.copy(sleepTimerRemaining = null) }
             return
@@ -155,7 +251,7 @@ class RadioPlayerViewModel(application: Application) : AndroidViewModel(applicat
 
         val totalMillis = minutes * 60 * 1000L
         val startTime = System.currentTimeMillis()
-        
+
         sleepTimerJob = viewModelScope.launch {
             _uiState.update { it.copy(sleepTimerRemaining = totalMillis) }
             while (System.currentTimeMillis() - startTime < totalMillis) {
