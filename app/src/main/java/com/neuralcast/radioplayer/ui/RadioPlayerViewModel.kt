@@ -10,6 +10,7 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Metadata
 import androidx.media3.common.Player
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import com.neuralcast.radioplayer.data.SettingsRepository
@@ -31,6 +32,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
+@androidx.annotation.OptIn(markerClass = [UnstableApi::class])
 class RadioPlayerViewModel(application: Application) : AndroidViewModel(application) {
     private val settingsRepository = SettingsRepository(application)
     private val songRequestRepository = SongRequestRepository()

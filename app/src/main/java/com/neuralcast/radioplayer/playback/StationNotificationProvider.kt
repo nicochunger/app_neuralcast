@@ -2,9 +2,11 @@ package com.neuralcast.radioplayer.playback
 
 import android.content.Context
 import androidx.media3.common.MediaMetadata
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.DefaultMediaNotificationProvider
 import com.neuralcast.radioplayer.util.MetadataHelper
 
+@androidx.annotation.OptIn(markerClass = [UnstableApi::class])
 class StationNotificationProvider(context: Context) : DefaultMediaNotificationProvider(context) {
     override fun getNotificationContentTitle(metadata: MediaMetadata): CharSequence? {
         val stationName = metadata.station ?: metadata.subtitle

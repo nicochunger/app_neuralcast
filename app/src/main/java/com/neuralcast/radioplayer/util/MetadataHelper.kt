@@ -2,8 +2,10 @@ package com.neuralcast.radioplayer.util
 
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Metadata
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.extractor.metadata.icy.IcyInfo
 
+@androidx.annotation.OptIn(markerClass = [UnstableApi::class])
 object MetadataHelper {
     fun extractNowPlaying(mediaMetadata: MediaMetadata, currentStationName: String?): String? =
         resolveTrack(
