@@ -140,6 +140,7 @@ fun RadioScreen(
             items(uiState.stations, key = { it.id }) { station ->
                 StationCard(
                     station = station,
+                    listenerCount = uiState.listenerCounts[station.id],
                     isActive = station.id == uiState.activeStationId,
                     playbackStatus = uiState.playbackStatus,
                     nowPlaying = if (station.id == uiState.activeStationId) uiState.nowPlaying else null,
@@ -260,6 +261,7 @@ private fun HistoryItem(entry: PlaybackHistoryEntry) {
 @Composable
 private fun StationCard(
     station: RadioStation,
+    listenerCount: Int?,
     isActive: Boolean,
     playbackStatus: PlaybackStatus,
     nowPlaying: String?,
@@ -287,6 +289,7 @@ private fun StationCard(
         nowPlaying.isNullOrBlank() -> "Waiting for metadata"
         else -> nowPlaying
     }
+    val listenerText = "Listeners: ${listenerCount?.toString() ?: "--"}"
 
     Card(
         modifier = Modifier
@@ -341,6 +344,18 @@ private fun StationCard(
                             ) {
                                 Text(
                                     text = statusText,
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = Color.White
+                                )
+                            }
+                            Surface(
+                                modifier = Modifier.padding(start = 8.dp),
+                                color = Color.Black.copy(alpha = 0.45f),
+                                shape = RoundedCornerShape(999.dp)
+                            ) {
+                                Text(
+                                    text = listenerText,
                                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
                                     style = MaterialTheme.typography.labelMedium,
                                     color = Color.White

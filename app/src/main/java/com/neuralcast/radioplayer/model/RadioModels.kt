@@ -50,6 +50,7 @@ data class SongRequestState(
 
 data class UiState(
     val stations: List<RadioStation> = emptyList(),
+    val listenerCounts: Map<String, Int> = emptyMap(),
     val activeStationId: String? = null,
     val playbackStatus: PlaybackStatus = PlaybackStatus.Idle,
     val nowPlaying: String? = null,

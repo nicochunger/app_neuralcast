@@ -17,6 +17,7 @@ import com.neuralcast.radioplayer.data.AdminRepository
 import com.neuralcast.radioplayer.data.SettingsRepository
 import com.neuralcast.radioplayer.data.SongRequestRepository
 import com.neuralcast.radioplayer.data.StationProvider
+import com.neuralcast.radioplayer.data.StationStatusRepository
 import com.neuralcast.radioplayer.model.PlaybackStatus
 import com.neuralcast.radioplayer.model.RequestableSong
 import com.neuralcast.radioplayer.model.RadioStation
@@ -31,11 +32,13 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 @androidx.annotation.OptIn(markerClass = [UnstableApi::class])
 class RadioPlayerViewModel(application: Application) : AndroidViewModel(application) {
     private val adminRepository = AdminRepository()
+    private val stationStatusRepository = StationStatusRepository()
     private val settingsRepository = SettingsRepository(application)
     private val songRequestRepository = SongRequestRepository()
     private val stations = StationProvider.stations
@@ -100,9 +103,11 @@ class RadioPlayerViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     private var sleepTimerJob: kotlinx.coroutines.Job? = null
+    private var listenerRefreshJob: kotlinx.coroutines.Job? = null
 
     init {
         connectToSession()
+        startListenerCountUpdates()
         viewModelScope.launch {
             settingsRepository.preferences.collect { prefs ->
                 _uiState.update { it.copy(appPreferences = prefs) }
@@ -398,6 +403,7 @@ class RadioPlayerViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     override fun onCleared() {
+        listenerRefreshJob?.cancel()
         controller?.removeListener(playerListener)
         controller?.release()
         controller = null
@@ -522,6 +528,30 @@ class RadioPlayerViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
+    private fun startListenerCountUpdates() {
+        listenerRefreshJob?.cancel()
+        listenerRefreshJob = viewModelScope.launch {
+            while (isActive) {
+                refreshListenerCounts()
+                kotlinx.coroutines.delay(LISTENER_REFRESH_INTERVAL_MS)
+            }
+        }
+    }
+
+    private suspend fun refreshListenerCounts() {
+        val updatedCounts = _uiState.value.listenerCounts.toMutableMap()
+        stations.forEach { station ->
+            runCatching {
+                stationStatusRepository.getCurrentListeners(station)
+            }.onSuccess { listenerCount ->
+                updatedCounts[station.id] = listenerCount
+            }
+        }
+        _uiState.update { current ->
+            current.copy(listenerCounts = updatedCounts)
+        }
+    }
+
     private fun refreshStreamAfterSkip(station: RadioStation) {
         val mediaController = controller ?: return
         val isActiveStation = _uiState.value.activeStationId == station.id
@@ -539,5 +569,9 @@ class RadioPlayerViewModel(application: Application) : AndroidViewModel(applicat
             normalized.contains("forbidden") ||
             normalized.contains("invalid api key") ||
             normalized.contains("access denied")
+    }
+
+    private companion object {
+        private const val LISTENER_REFRESH_INTERVAL_MS = 3 * 60 * 1000L
     }
 }
