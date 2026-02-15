@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material3.Button
@@ -78,6 +79,7 @@ fun RadioScreen(
     uiState: UiState,
     onPlayToggle: (RadioStation) -> Unit,
     onSongRequestClick: (RadioStation) -> Unit,
+    onSkipTrack: (RadioStation) -> Unit,
     onSongRequestSubmit: (RequestableSong) -> Unit,
     onSongRequestDismiss: () -> Unit,
     onSleepTimerSet: (Int?) -> Unit,
@@ -142,7 +144,10 @@ fun RadioScreen(
                     playbackStatus = uiState.playbackStatus,
                     nowPlaying = if (station.id == uiState.activeStationId) uiState.nowPlaying else null,
                     onPlayToggle = { onPlayToggle(station) },
-                    onSongRequestClick = { onSongRequestClick(station) }
+                    onSongRequestClick = { onSongRequestClick(station) },
+                    showSkipTrack = uiState.isAdminModeEnabled,
+                    isSkippingTrack = uiState.skippingStationId == station.id,
+                    onSkipTrack = { onSkipTrack(station) }
                 )
             }
 
@@ -259,7 +264,10 @@ private fun StationCard(
     playbackStatus: PlaybackStatus,
     nowPlaying: String?,
     onPlayToggle: () -> Unit,
-    onSongRequestClick: () -> Unit
+    onSongRequestClick: () -> Unit,
+    showSkipTrack: Boolean,
+    isSkippingTrack: Boolean,
+    onSkipTrack: () -> Unit
 ) {
     val cardShape = RoundedCornerShape(28.dp)
     val overlayBrush = Brush.verticalGradient(
@@ -372,7 +380,38 @@ private fun StationCard(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End)
                     ) {
+                        if (showSkipTrack) {
+                            OutlinedButton(
+                                modifier = Modifier.weight(1f),
+                                onClick = onSkipTrack,
+                                enabled = !isSkippingTrack,
+                                colors = ButtonDefaults.outlinedButtonColors(
+                                    contentColor = Color.White
+                                ),
+                                shape = RoundedCornerShape(999.dp)
+                            ) {
+                                if (isSkippingTrack) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(16.dp),
+                                        strokeWidth = 2.dp,
+                                        color = Color.White
+                                    )
+                                } else {
+                                    Icon(
+                                        imageVector = Icons.Default.SkipNext,
+                                        contentDescription = "Skip current track on ${station.name}"
+                                    )
+                                }
+                                Text(
+                                    text = "Skip",
+                                    maxLines = 1,
+                                    modifier = Modifier.padding(start = 8.dp)
+                                )
+                            }
+                        }
+
                         OutlinedButton(
+                            modifier = Modifier.weight(1f),
                             onClick = onSongRequestClick,
                             colors = ButtonDefaults.outlinedButtonColors(
                                 contentColor = Color.White
@@ -384,12 +423,14 @@ private fun StationCard(
                                 contentDescription = "Request song for ${station.name}"
                             )
                             Text(
-                                text = "Request Song",
+                                text = "Request",
+                                maxLines = 1,
                                 modifier = Modifier.padding(start = 8.dp)
                             )
                         }
 
                         Button(
+                            modifier = Modifier.weight(1f),
                             onClick = onPlayToggle,
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
@@ -404,6 +445,7 @@ private fun StationCard(
                                 )
                                 Text(
                                     text = "Stop",
+                                    maxLines = 1,
                                     modifier = Modifier.padding(start = 8.dp)
                                 )
                             } else {
@@ -413,6 +455,7 @@ private fun StationCard(
                                 )
                                 Text(
                                     text = "Play",
+                                    maxLines = 1,
                                     modifier = Modifier.padding(start = 8.dp)
                                 )
                             }

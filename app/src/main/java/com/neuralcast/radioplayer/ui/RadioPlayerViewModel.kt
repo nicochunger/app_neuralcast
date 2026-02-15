@@ -13,6 +13,7 @@ import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
+import com.neuralcast.radioplayer.data.AdminRepository
 import com.neuralcast.radioplayer.data.SettingsRepository
 import com.neuralcast.radioplayer.data.SongRequestRepository
 import com.neuralcast.radioplayer.data.StationProvider
@@ -34,6 +35,7 @@ import kotlinx.coroutines.launch
 
 @androidx.annotation.OptIn(markerClass = [UnstableApi::class])
 class RadioPlayerViewModel(application: Application) : AndroidViewModel(application) {
+    private val adminRepository = AdminRepository()
     private val settingsRepository = SettingsRepository(application)
     private val songRequestRepository = SongRequestRepository()
     private val stations = StationProvider.stations
@@ -51,6 +53,7 @@ class RadioPlayerViewModel(application: Application) : AndroidViewModel(applicat
 
     private var controller: MediaController? = null
     private var controllerFuture: com.google.common.util.concurrent.ListenableFuture<MediaController>? = null
+    private var adminApiKey: String? = null
 
     private val playerListener = object : Player.Listener {
         override fun onPlaybackStateChanged(playbackState: Int) {
@@ -126,6 +129,127 @@ class RadioPlayerViewModel(application: Application) : AndroidViewModel(applicat
 
     fun saveTheme(theme: AppTheme) {
         viewModelScope.launch { settingsRepository.setTheme(theme) }
+    }
+
+    fun enableAdminMode(apiKey: String) {
+        val normalizedApiKey = apiKey.trim()
+        if (normalizedApiKey.isBlank()) {
+            _uiState.update { current ->
+                current.copy(errorMessage = "Enter your admin API key to enable admin mode.")
+            }
+            return
+        }
+
+        if (_uiState.value.isAdminModeAuthenticating) {
+            return
+        }
+
+        val validationStation = stations.firstOrNull()
+        if (validationStation == null) {
+            _uiState.update { current ->
+                current.copy(errorMessage = "No stations available to validate admin credentials.")
+            }
+            return
+        }
+
+        _uiState.update { current ->
+            current.copy(isAdminModeAuthenticating = true)
+        }
+
+        viewModelScope.launch {
+            runCatching {
+                adminRepository.validateAdminApiKey(validationStation, normalizedApiKey)
+            }.onSuccess {
+                adminApiKey = normalizedApiKey
+                _uiState.update { current ->
+                    current.copy(
+                        isAdminModeEnabled = true,
+                        isAdminModeAuthenticating = false,
+                        errorMessage = "Admin mode enabled."
+                    )
+                }
+            }.onFailure { error ->
+                _uiState.update { current ->
+                    current.copy(
+                        isAdminModeEnabled = false,
+                        isAdminModeAuthenticating = false,
+                        errorMessage = error.message
+                            ?: "Invalid admin API key or insufficient permissions."
+                    )
+                }
+            }
+        }
+    }
+
+    fun disableAdminMode() {
+        adminApiKey = null
+        _uiState.update { current ->
+            current.copy(
+                isAdminModeEnabled = false,
+                isAdminModeAuthenticating = false,
+                skippingStationId = null,
+                errorMessage = "Admin mode disabled."
+            )
+        }
+    }
+
+    fun onSkipTrack(station: RadioStation) {
+        val currentState = _uiState.value
+        if (!currentState.isAdminModeEnabled) {
+            _uiState.update { current ->
+                current.copy(errorMessage = "Enable admin mode in Settings to skip tracks.")
+            }
+            return
+        }
+
+        val apiKey = adminApiKey
+        if (apiKey.isNullOrBlank()) {
+            _uiState.update { current ->
+                current.copy(
+                    isAdminModeEnabled = false,
+                    errorMessage = "Admin session expired. Re-enter your admin API key."
+                )
+            }
+            return
+        }
+
+        if (currentState.skippingStationId != null) {
+            return
+        }
+
+        _uiState.update { current ->
+            current.copy(skippingStationId = station.id)
+        }
+
+        viewModelScope.launch {
+            runCatching {
+                adminRepository.skipCurrentTrack(station, apiKey)
+            }.onSuccess { message ->
+                refreshStreamAfterSkip(station)
+                _uiState.update { current ->
+                    current.copy(
+                        skippingStationId = null,
+                        errorMessage = message
+                    )
+                }
+            }.onFailure { error ->
+                val shouldResetAdminMode = isAuthenticationError(error.message)
+                if (shouldResetAdminMode) {
+                    adminApiKey = null
+                }
+                _uiState.update { current ->
+                    current.copy(
+                        skippingStationId = null,
+                        isAdminModeEnabled = if (shouldResetAdminMode) false else current.isAdminModeEnabled,
+                        errorMessage = if (shouldResetAdminMode) {
+                            "Admin session expired. Re-enter your admin API key."
+                        } else {
+                            error.message ?: "Unable to skip the current track."
+                        }
+                    )
+                }
+            }
+        }
     }
 
 
@@ -396,5 +520,24 @@ class RadioPlayerViewModel(application: Application) : AndroidViewModel(applicat
         viewModelScope.launch {
             settingsRepository.setRecentlyPlayed(history)
         }
+    }
+
+    private fun refreshStreamAfterSkip(station: RadioStation) {
+        val mediaController = controller ?: return
+        val isActiveStation = _uiState.value.activeStationId == station.id
+        if (!isActiveStation) return
+        if (mediaController.playbackState != Player.STATE_READY || !mediaController.isPlaying) return
+
+        // Reconnect to the same stream so buffered audio doesn't mask a successful server-side skip.
+        startPlayback(mediaController, station)
+    }
+
+    private fun isAuthenticationError(message: String?): Boolean {
+        if (message.isNullOrBlank()) return false
+        val normalized = message.lowercase()
+        return normalized.contains("unauthorized") ||
+            normalized.contains("forbidden") ||
+            normalized.contains("invalid api key") ||
+            normalized.contains("access denied")
     }
 }

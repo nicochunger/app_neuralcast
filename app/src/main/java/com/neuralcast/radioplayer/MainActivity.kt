@@ -49,6 +49,7 @@ class MainActivity : ComponentActivity() {
                             uiState = uiState,
                             onPlayToggle = { station -> viewModel.onPlayToggle(station) },
                             onSongRequestClick = { station -> viewModel.onSongRequestClick(station) },
+                            onSkipTrack = { station -> viewModel.onSkipTrack(station) },
                             onSongRequestSubmit = viewModel::onSongRequestSubmit,
                             onSongRequestDismiss = viewModel::onSongRequestDismiss,
                             onSleepTimerSet = viewModel::setSleepTimer,
@@ -60,6 +61,10 @@ class MainActivity : ComponentActivity() {
                         SettingsScreen(
                             appPreferences = uiState.appPreferences,
                             onThemeChanged = viewModel::saveTheme,
+                            isAdminModeEnabled = uiState.isAdminModeEnabled,
+                            isAdminModeAuthenticating = uiState.isAdminModeAuthenticating,
+                            onEnableAdminMode = viewModel::enableAdminMode,
+                            onDisableAdminMode = viewModel::disableAdminMode,
                             onNavigateBack = { navController.popBackStack() }
                         )
                     }

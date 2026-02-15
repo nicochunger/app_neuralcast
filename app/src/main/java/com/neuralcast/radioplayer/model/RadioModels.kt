@@ -57,5 +57,8 @@ data class UiState(
     val songRequestState: SongRequestState = SongRequestState(),
     val sleepTimerRemaining: Long? = null,
     val recentlyPlayed: List<PlaybackHistoryEntry> = emptyList(),
-    val appPreferences: AppPreferences = AppPreferences()
+    val appPreferences: AppPreferences = AppPreferences(),
+    val isAdminModeEnabled: Boolean = false,
+    val isAdminModeAuthenticating: Boolean = false,
+    val skippingStationId: String? = null
 )
