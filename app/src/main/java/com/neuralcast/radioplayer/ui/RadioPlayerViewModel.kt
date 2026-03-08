@@ -114,6 +114,23 @@ class RadioPlayerViewModel(application: Application) : AndroidViewModel(applicat
             }
         }
         viewModelScope.launch {
+            settingsRepository.adminSession.collect { adminSession ->
+                val persistedApiKey = adminSession.apiKey?.takeIf { it.isNotBlank() }
+                adminApiKey = persistedApiKey
+                val isAdminModeEnabled = adminSession.isAdminModeEnabled && persistedApiKey != null
+                _uiState.update { current ->
+                    current.copy(
+                        isAdminModeEnabled = isAdminModeEnabled,
+                        skippingStationId = if (isAdminModeEnabled) {
+                            current.skippingStationId
+                        } else {
+                            null
+                        }
+                    )
+                }
+            }
+        }
+        viewModelScope.launch {
             settingsRepository.playbackState.collect { snapshot ->
                 val activeStationId = snapshot.activeStationId
                     ?.takeIf { stationId -> stations.any { it.id == stationId } }
@@ -164,6 +181,7 @@ class RadioPlayerViewModel(application: Application) : AndroidViewModel(applicat
         viewModelScope.launch {
             runCatching {
                 adminRepository.validateAdminApiKey(validationStation, normalizedApiKey)
+                settingsRepository.setAdminSession(normalizedApiKey)
             }.onSuccess {
                 adminApiKey = normalizedApiKey
                 _uiState.update { current ->
@@ -188,6 +206,9 @@ class RadioPlayerViewModel(application: Application) : AndroidViewModel(applicat
 
     fun disableAdminMode() {
         adminApiKey = null
+        viewModelScope.launch {
+            settingsRepository.clearAdminSession()
+        }
         _uiState.update { current ->
             current.copy(
                 isAdminModeEnabled = false,
@@ -209,6 +230,9 @@ class RadioPlayerViewModel(application: Application) : AndroidViewModel(applicat
 
         val apiKey = adminApiKey
         if (apiKey.isNullOrBlank()) {
+            viewModelScope.launch {
+                settingsRepository.clearAdminSession()
+            }
             _uiState.update { current ->
                 current.copy(
                     isAdminModeEnabled = false,
@@ -241,6 +265,7 @@ class RadioPlayerViewModel(application: Application) : AndroidViewModel(applicat
                 val shouldResetAdminMode = isAuthenticationError(error.message)
                 if (shouldResetAdminMode) {
                     adminApiKey = null
+                    settingsRepository.clearAdminSession()
                 }
                 _uiState.update { current ->
                     current.copy(

@@ -1,4 +1,5 @@
 <resources>
     <string name="app_name">NeuralCast</string>
     <string name="auto_root_title">Radio Stations</string>
+    <string name="auto_skip_track">Skip Track</string>
 </resources>

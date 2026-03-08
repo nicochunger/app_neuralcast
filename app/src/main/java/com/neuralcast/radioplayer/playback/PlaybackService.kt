@@ -4,9 +4,11 @@ import android.app.PendingIntent
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.view.KeyEvent
 import androidx.core.os.bundleOf
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
+import androidx.media3.common.ForwardingPlayer
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Metadata
@@ -18,6 +20,7 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.session.LibraryResult
 import androidx.media3.session.MediaConstants
+import androidx.media3.session.CommandButton
 import androidx.media3.session.MediaLibraryService
 import androidx.media3.session.MediaSession
 import com.google.common.collect.ImmutableList
@@ -25,17 +28,32 @@ import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 import com.neuralcast.radioplayer.MainActivity
 import com.neuralcast.radioplayer.R
+import com.neuralcast.radioplayer.data.AdminRepository
+import com.neuralcast.radioplayer.data.SettingsRepository
 import com.neuralcast.radioplayer.data.StationProvider
 import com.neuralcast.radioplayer.model.RadioStation
 import com.neuralcast.radioplayer.playback.PlaybackConstants.EXTRA_NOW_PLAYING
 import com.neuralcast.radioplayer.playback.NowPlayingStore
 import com.neuralcast.radioplayer.util.MetadataHelper
+import java.util.concurrent.atomic.AtomicBoolean
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlin.math.min
 
 @androidx.annotation.OptIn(markerClass = [UnstableApi::class])
 class PlaybackService : MediaLibraryService() {
     private var player: ExoPlayer? = null
+    private var sessionPlayer: Player? = null
     private var mediaLibrarySession: MediaLibrarySession? = null
+    private val adminRepository = AdminRepository()
+    private lateinit var settingsRepository: SettingsRepository
+    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val isAutoSkipTrackInProgress = AtomicBoolean(false)
     private val playerMetadataListener = object : Player.Listener {
         override fun onMetadata(metadata: Metadata) {
             val currentItem = player?.currentMediaItem ?: return
@@ -69,6 +87,7 @@ class PlaybackService : MediaLibraryService() {
 
     override fun onCreate() {
         super.onCreate()
+        settingsRepository = SettingsRepository(applicationContext)
 
         val httpDataSourceFactory = DefaultHttpDataSource.Factory()
             .setUserAgent("NeuralCastRadio")
@@ -88,6 +107,7 @@ class PlaybackService : MediaLibraryService() {
                 setAudioAttributes(attrs, true)
                 setHandleAudioBecomingNoisy(true)
             }
+        val autoCompatiblePlayer = buildAutoCompatiblePlayer(exoPlayer)
 
         val sessionActivityIntent = Intent(this, MainActivity::class.java)
         val sessionActivity = PendingIntent.getActivity(
@@ -97,12 +117,14 @@ class PlaybackService : MediaLibraryService() {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
-        mediaLibrarySession = MediaLibrarySession.Builder(this, exoPlayer, CustomMediaLibrarySessionCallback())
+        mediaLibrarySession = MediaLibrarySession.Builder(this, autoCompatiblePlayer, CustomMediaLibrarySessionCallback())
             .setId(SESSION_ID)
             .setSessionActivity(sessionActivity)
+            .setCustomLayout(listOf(buildAutoSkipTrackButton()))
             .build()
 
         player = exoPlayer
+        sessionPlayer = autoCompatiblePlayer
         exoPlayer.addListener(playerMetadataListener)
         setMediaNotificationProvider(StationNotificationProvider(this))
     }
@@ -112,15 +134,31 @@ class PlaybackService : MediaLibraryService() {
     }
 
     override fun onDestroy() {
+        serviceScope.cancel()
         mediaLibrarySession?.release()
         player?.removeListener(playerMetadataListener)
-        player?.release()
+        sessionPlayer?.release()
         mediaLibrarySession = null
         player = null
+        sessionPlayer = null
         super.onDestroy()
     }
 
     private inner class CustomMediaLibrarySessionCallback : MediaLibrarySession.Callback {
+        override fun onMediaButtonEvent(
+            session: MediaSession,
+            controllerInfo: MediaSession.ControllerInfo,
+            intent: Intent
+        ): Boolean {
+            @Suppress("DEPRECATION")
+            val keyEvent = intent.getParcelableExtra<KeyEvent>(Intent.EXTRA_KEY_EVENT)
+            if (keyEvent?.action == KeyEvent.ACTION_DOWN && keyEvent.keyCode == KeyEvent.KEYCODE_MEDIA_NEXT) {
+                requestAdminTrackSkipForCurrentStation()
+                return true
+            }
+            return super.onMediaButtonEvent(session, controllerInfo, intent)
+        }
+
         override fun onGetLibraryRoot(
             session: MediaLibrarySession,
             browser: MediaSession.ControllerInfo,
@@ -208,12 +246,7 @@ class PlaybackService : MediaLibraryService() {
             mediaItems: MutableList<MediaItem>
         ): ListenableFuture<MutableList<MediaItem>> {
             val updatedItems = mediaItems.map { item ->
-                val station = resolveStationForRequest(item)
-                if (station != null) {
-                    buildPlayableStationItem(station)
-                } else {
-                    item
-                }
+                resolveStationForRequest(item)?.let(::buildPlayableStationItem) ?: item
             }.toMutableList()
             return Futures.immediateFuture(updatedItems)
         }
@@ -256,6 +289,124 @@ class PlaybackService : MediaLibraryService() {
             return null
         }
         return getSearchMatches(searchQuery).firstOrNull()
+    }
+
+    private fun buildAutoCompatiblePlayer(exoPlayer: ExoPlayer): Player {
+        return object : ForwardingPlayer(exoPlayer) {
+            override fun getAvailableCommands(): Player.Commands {
+                return super.getAvailableCommands()
+                    .buildUpon()
+                    .add(Player.COMMAND_SEEK_TO_NEXT)
+                    .add(Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM)
+                    .build()
+            }
+
+            override fun seekToNext() {
+                requestAdminTrackSkipForCurrentStation()
+            }
+
+            override fun seekToNextMediaItem() {
+                requestAdminTrackSkipForCurrentStation()
+            }
+
+            @Suppress("OVERRIDE_DEPRECATION")
+            override fun next() {
+                requestAdminTrackSkipForCurrentStation()
+            }
+
+            @Suppress("OVERRIDE_DEPRECATION")
+            override fun hasNext(): Boolean {
+                return currentMediaItem != null
+            }
+
+            override fun hasNextMediaItem(): Boolean {
+                return currentMediaItem != null
+            }
+
+            @Suppress("OVERRIDE_DEPRECATION")
+            override fun hasNextWindow(): Boolean {
+                return currentMediaItem != null
+            }
+
+            override fun seekTo(mediaItemIndex: Int, positionMs: Long) {
+                val isNextItemRequest =
+                    mediaItemIndex == currentMediaItemIndex + 1 &&
+                        positionMs == C.TIME_UNSET
+                if (isNextItemRequest) {
+                    requestAdminTrackSkipForCurrentStation()
+                    return
+                }
+                super.seekTo(mediaItemIndex, positionMs)
+            }
+        }
+    }
+
+    private fun buildAutoSkipTrackButton(): CommandButton {
+        return CommandButton.Builder()
+            .setPlayerCommand(Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM)
+            .setDisplayName(getString(R.string.auto_skip_track))
+            .build()
+    }
+
+    private fun requestAdminTrackSkipForCurrentStation() {
+        if (!isAutoSkipTrackInProgress.compareAndSet(false, true)) {
+            return
+        }
+
+        val station = resolveActiveStation()
+        if (station == null) {
+            isAutoSkipTrackInProgress.set(false)
+            return
+        }
+
+        serviceScope.launch {
+            try {
+                val adminSession = settingsRepository.adminSession.first()
+                val apiKey = adminSession.apiKey?.trim().orEmpty()
+                if (!adminSession.isAdminModeEnabled || apiKey.isBlank()) {
+                    return@launch
+                }
+
+                runCatching {
+                    adminRepository.skipCurrentTrack(station, apiKey)
+                }.onSuccess {
+                    withContext(Dispatchers.Main) {
+                        refreshStreamAfterSkip(station)
+                    }
+                }
+            } finally {
+                isAutoSkipTrackInProgress.set(false)
+            }
+        }
+    }
+
+    private fun resolveActiveStation(): RadioStation? {
+        val activeMediaItem = player?.currentMediaItem ?: return null
+        StationProvider.getStation(activeMediaItem.mediaId)?.let { return it }
+        val stationName = activeMediaItem.mediaMetadata.station?.toString()
+            ?: activeMediaItem.mediaMetadata.title?.toString()
+        if (stationName.isNullOrBlank()) {
+            return null
+        }
+        return StationProvider.stations.firstOrNull { station ->
+            station.name.equals(stationName, ignoreCase = true)
+        }
+    }
+
+    private fun refreshStreamAfterSkip(station: RadioStation) {
+        val exoPlayer = player ?: return
+        val currentMediaItem = exoPlayer.currentMediaItem ?: return
+        if (currentMediaItem.mediaId != station.id) {
+            return
+        }
+
+        val shouldResumePlayback = exoPlayer.playWhenReady
+        exoPlayer.setMediaItem(currentMediaItem)
+        exoPlayer.prepare()
+        exoPlayer.playWhenReady = shouldResumePlayback
+        if (shouldResumePlayback) {
+            exoPlayer.play()
+        }
     }
 
     private fun withCarContentStyle(params: LibraryParams?): LibraryParams {

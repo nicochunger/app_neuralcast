@@ -3,8 +3,8 @@ package com.neuralcast.radioplayer.data
 import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
-import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.neuralcast.radioplayer.model.AppPreferences
@@ -22,6 +22,8 @@ class SettingsRepository(private val context: Context) {
     private val THEME_KEY = stringPreferencesKey("theme")
     private val ACTIVE_STATION_KEY = stringPreferencesKey("active_station_id")
     private val RECENTLY_PLAYED_KEY = stringPreferencesKey("recently_played_json")
+    private val ADMIN_MODE_ENABLED_KEY = booleanPreferencesKey("admin_mode_enabled")
+    private val ADMIN_API_KEY = stringPreferencesKey("admin_api_key")
 
     val preferences: Flow<AppPreferences> = context.dataStore.data.map { prefs ->
         AppPreferences(
@@ -33,6 +35,13 @@ class SettingsRepository(private val context: Context) {
         PlaybackSnapshot(
             activeStationId = prefs[ACTIVE_STATION_KEY],
             recentlyPlayed = decodeHistory(prefs[RECENTLY_PLAYED_KEY])
+        )
+    }
+
+    val adminSession: Flow<AdminSessionSnapshot> = context.dataStore.data.map { prefs ->
+        AdminSessionSnapshot(
+            isAdminModeEnabled = prefs[ADMIN_MODE_ENABLED_KEY] ?: false,
+            apiKey = prefs[ADMIN_API_KEY]
         )
     }
 
@@ -62,6 +71,20 @@ class SettingsRepository(private val context: Context) {
             } else {
                 prefs[RECENTLY_PLAYED_KEY] = encodeHistory(history)
             }
+        }
+    }
+
+    suspend fun setAdminSession(apiKey: String) {
+        context.dataStore.edit { prefs ->
+            prefs[ADMIN_MODE_ENABLED_KEY] = true
+            prefs[ADMIN_API_KEY] = apiKey
+        }
+    }
+
+    suspend fun clearAdminSession() {
+        context.dataStore.edit { prefs ->
+            prefs[ADMIN_MODE_ENABLED_KEY] = false
+            prefs.remove(ADMIN_API_KEY)
         }
     }
 
@@ -98,5 +121,10 @@ class SettingsRepository(private val context: Context) {
     data class PlaybackSnapshot(
         val activeStationId: String?,
         val recentlyPlayed: List<PlaybackHistoryEntry>
+    )
+
+    data class AdminSessionSnapshot(
+        val isAdminModeEnabled: Boolean,
+        val apiKey: String?
     )
 }
