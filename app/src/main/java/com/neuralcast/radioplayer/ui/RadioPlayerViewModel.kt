@@ -14,10 +14,13 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import com.neuralcast.radioplayer.data.AdminRepository
+import com.neuralcast.radioplayer.data.HostAdminRepository
 import com.neuralcast.radioplayer.data.SettingsRepository
 import com.neuralcast.radioplayer.data.SongRequestRepository
 import com.neuralcast.radioplayer.data.StationProvider
 import com.neuralcast.radioplayer.data.StationStatusRepository
+import com.neuralcast.radioplayer.model.HostAdminConsoleState
+import com.neuralcast.radioplayer.model.HostAdminJob
 import com.neuralcast.radioplayer.model.PlaybackStatus
 import com.neuralcast.radioplayer.model.RequestableSong
 import com.neuralcast.radioplayer.model.RadioStation
@@ -38,6 +41,7 @@ import kotlinx.coroutines.launch
 @androidx.annotation.OptIn(markerClass = [UnstableApi::class])
 class RadioPlayerViewModel(application: Application) : AndroidViewModel(application) {
     private val adminRepository = AdminRepository()
+    private val hostAdminRepository = HostAdminRepository()
     private val stationStatusRepository = StationStatusRepository()
     private val settingsRepository = SettingsRepository(application)
     private val songRequestRepository = SongRequestRepository()
@@ -104,6 +108,7 @@ class RadioPlayerViewModel(application: Application) : AndroidViewModel(applicat
 
     private var sleepTimerJob: kotlinx.coroutines.Job? = null
     private var listenerRefreshJob: kotlinx.coroutines.Job? = null
+    private var hostAdminPollJob: kotlinx.coroutines.Job? = null
 
     init {
         connectToSession()
@@ -125,6 +130,30 @@ class RadioPlayerViewModel(application: Application) : AndroidViewModel(applicat
                             current.skippingStationId
                         } else {
                             null
+                        }
+                    )
+                }
+            }
+        }
+        viewModelScope.launch {
+            settingsRepository.hostAdminConfig.collect { hostConfig ->
+                val configChanged = hostConfig.baseUrl != _uiState.value.hostAdminConsole.baseUrl ||
+                    hostConfig.token != _uiState.value.hostAdminConsole.token
+                if (configChanged) {
+                    hostAdminPollJob?.cancel()
+                }
+                _uiState.update { current ->
+                    current.copy(
+                        hostAdminConsole = if (configChanged) {
+                            HostAdminConsoleState(
+                                baseUrl = hostConfig.baseUrl,
+                                token = hostConfig.token
+                            )
+                        } else {
+                            current.hostAdminConsole.copy(
+                                baseUrl = hostConfig.baseUrl,
+                                token = hostConfig.token
+                            )
                         }
                     )
                 }
@@ -206,6 +235,7 @@ class RadioPlayerViewModel(application: Application) : AndroidViewModel(applicat
 
     fun disableAdminMode() {
         adminApiKey = null
+        hostAdminPollJob?.cancel()
         viewModelScope.launch {
             settingsRepository.clearAdminSession()
         }
@@ -214,8 +244,207 @@ class RadioPlayerViewModel(application: Application) : AndroidViewModel(applicat
                 isAdminModeEnabled = false,
                 isAdminModeAuthenticating = false,
                 skippingStationId = null,
+                hostAdminConsole = resetHostAdminRuntimeState(current.hostAdminConsole),
                 errorMessage = "Admin mode disabled."
             )
+        }
+    }
+
+    fun saveHostAdminConfig(baseUrl: String, token: String) {
+        val normalizedBaseUrl = baseUrl.trim().trimEnd('/')
+        val normalizedToken = token.trim()
+        if (normalizedBaseUrl.isBlank() && normalizedToken.isBlank()) {
+            hostAdminPollJob?.cancel()
+            viewModelScope.launch {
+                settingsRepository.clearHostAdminConfig()
+            }
+            _uiState.update { current ->
+                current.copy(
+                    hostAdminConsole = HostAdminConsoleState(),
+                    errorMessage = "Host admin settings cleared."
+                )
+            }
+            return
+        }
+
+        if (normalizedBaseUrl.isBlank() || normalizedToken.isBlank()) {
+            _uiState.update { current ->
+                current.copy(errorMessage = "Enter both the host admin API URL and token.")
+            }
+            return
+        }
+
+        if (!normalizedBaseUrl.startsWith("https://")) {
+            _uiState.update { current ->
+                current.copy(errorMessage = "Enter a valid HTTPS host admin API URL starting with https://")
+            }
+            return
+        }
+
+        hostAdminPollJob?.cancel()
+        viewModelScope.launch {
+            settingsRepository.setHostAdminConfig(normalizedBaseUrl, normalizedToken)
+        }
+        _uiState.update { current ->
+            current.copy(
+                hostAdminConsole = HostAdminConsoleState(
+                    baseUrl = normalizedBaseUrl,
+                    token = normalizedToken
+                ),
+                errorMessage = "Host admin settings saved."
+            )
+        }
+    }
+
+    fun loadHostAdminOptions() {
+        val hostAdminState = _uiState.value.hostAdminConsole
+        if (!hostAdminState.isConfigured) {
+            _uiState.update { current ->
+                current.copy(errorMessage = "Save the host admin API URL and token first.")
+            }
+            return
+        }
+        if (hostAdminState.isLoadingOptions) {
+            return
+        }
+
+        _uiState.update { current ->
+            current.copy(
+                hostAdminConsole = current.hostAdminConsole.copy(
+                    isLoadingOptions = true,
+                    optionsStatusMessage = "Loading stations and archetypes...",
+                    isOptionsStatusError = false
+                )
+            )
+        }
+
+        viewModelScope.launch {
+            runCatching {
+                hostAdminRepository.getOptions(
+                    baseUrl = hostAdminState.baseUrl,
+                    token = hostAdminState.token
+                )
+            }.onSuccess { options ->
+                _uiState.update { current ->
+                    val selectedStation = resolveSelectedStation(
+                        availableStations = options.stations,
+                        currentSelection = current.hostAdminConsole.selectedStationId,
+                        activeStationId = current.activeStationId
+                    )
+                    val selectedArchetype = resolveSelectedArchetype(
+                        availableArchetypes = options.archetypes,
+                        currentSelection = current.hostAdminConsole.selectedArchetype
+                    )
+                    current.copy(
+                        hostAdminConsole = current.hostAdminConsole.copy(
+                            isLoadingOptions = false,
+                            optionsStatusMessage = "Loaded ${options.stations.size} stations and ${options.archetypes.size} archetypes.",
+                            isOptionsStatusError = false,
+                            availableStations = options.stations,
+                            availableArchetypes = options.archetypes,
+                            selectedStationId = selectedStation,
+                            selectedArchetype = selectedArchetype
+                        )
+                    )
+                }
+            }.onFailure { error ->
+                _uiState.update { current ->
+                    val message = error.message ?: "Unable to load host admin options."
+                    current.copy(
+                        hostAdminConsole = current.hostAdminConsole.copy(
+                            isLoadingOptions = false,
+                            optionsStatusMessage = message,
+                            isOptionsStatusError = true
+                        ),
+                        errorMessage = message
+                    )
+                }
+            }
+        }
+    }
+
+    fun selectHostAdminStation(stationId: String) {
+        _uiState.update { current ->
+            current.copy(
+                hostAdminConsole = current.hostAdminConsole.copy(selectedStationId = stationId)
+            )
+        }
+    }
+
+    fun selectHostAdminArchetype(archetype: String) {
+        _uiState.update { current ->
+            current.copy(
+                hostAdminConsole = current.hostAdminConsole.copy(selectedArchetype = archetype)
+            )
+        }
+    }
+
+    fun runForcedArchetype() {
+        val hostAdminState = _uiState.value.hostAdminConsole
+        if (!hostAdminState.isConfigured) {
+            _uiState.update { current ->
+                current.copy(errorMessage = "Save the host admin API URL and token first.")
+            }
+            return
+        }
+
+        val stationId = hostAdminState.selectedStationId
+        val archetype = hostAdminState.selectedArchetype
+        if (stationId.isNullOrBlank() || archetype.isNullOrBlank()) {
+            _uiState.update { current ->
+                current.copy(errorMessage = "Select both a station and an archetype first.")
+            }
+            return
+        }
+
+        if (hostAdminState.isSubmitting || hostAdminState.isPollingJob) {
+            return
+        }
+
+        _uiState.update { current ->
+            current.copy(
+                hostAdminConsole = current.hostAdminConsole.copy(isSubmitting = true)
+            )
+        }
+
+        viewModelScope.launch {
+            runCatching {
+                hostAdminRepository.submitForceArchetype(
+                    baseUrl = hostAdminState.baseUrl,
+                    token = hostAdminState.token,
+                    station = stationId,
+                    archetype = archetype
+                )
+            }.onSuccess { jobId ->
+                _uiState.update { current ->
+                    current.copy(
+                        hostAdminConsole = current.hostAdminConsole.copy(
+                            isSubmitting = false,
+                            activeJob = HostAdminJob(
+                                jobId = jobId,
+                                station = stationId,
+                                archetype = archetype,
+                                dryRun = false,
+                                status = "accepted"
+                            ),
+                            isPollingJob = true
+                        ),
+                        errorMessage = "Forced archetype request accepted."
+                    )
+                }
+                startPollingHostAdminJob(
+                    jobId = jobId,
+                    baseUrl = hostAdminState.baseUrl,
+                    token = hostAdminState.token
+                )
+            }.onFailure { error ->
+                _uiState.update { current ->
+                    current.copy(
+                        hostAdminConsole = current.hostAdminConsole.copy(isSubmitting = false),
+                        errorMessage = error.message ?: "Unable to start a forced host run."
+                    )
+                }
+            }
         }
     }
 
@@ -429,6 +658,7 @@ class RadioPlayerViewModel(application: Application) : AndroidViewModel(applicat
 
     override fun onCleared() {
         listenerRefreshJob?.cancel()
+        hostAdminPollJob?.cancel()
         controller?.removeListener(playerListener)
         controller?.release()
         controller = null
@@ -596,7 +826,99 @@ class RadioPlayerViewModel(application: Application) : AndroidViewModel(applicat
             normalized.contains("access denied")
     }
 
+    private fun startPollingHostAdminJob(jobId: String, baseUrl: String, token: String) {
+        hostAdminPollJob?.cancel()
+        hostAdminPollJob = viewModelScope.launch {
+            while (isActive) {
+                val result = runCatching {
+                    hostAdminRepository.getJobStatus(baseUrl = baseUrl, token = token, jobId = jobId)
+                }
+                if (result.isFailure) {
+                    _uiState.update { current ->
+                        current.copy(
+                            hostAdminConsole = current.hostAdminConsole.copy(isPollingJob = false),
+                            errorMessage = result.exceptionOrNull()?.message
+                                ?: "Unable to refresh host job status."
+                        )
+                    }
+                    break
+                }
+
+                val job = result.getOrThrow()
+                val isTerminal = isTerminalJobStatus(job.status)
+                _uiState.update { current ->
+                    current.copy(
+                        hostAdminConsole = current.hostAdminConsole.copy(
+                            activeJob = job,
+                            isPollingJob = !isTerminal
+                        )
+                    )
+                }
+
+                if (isTerminal) {
+                    _uiState.update { current ->
+                        current.copy(
+                            errorMessage = when (job.status.lowercase()) {
+                                "succeeded" -> "Forced archetype completed for ${job.station}."
+                                else -> {
+                                    val exitSuffix = job.exitCode?.let { " (exit code $it)" }.orEmpty()
+                                    "Forced archetype failed for ${job.station}$exitSuffix."
+                                }
+                            }
+                        )
+                    }
+                    break
+                }
+
+                kotlinx.coroutines.delay(HOST_ADMIN_POLL_INTERVAL_MS)
+            }
+        }
+    }
+
+    private fun resolveSelectedStation(
+        availableStations: List<String>,
+        currentSelection: String?,
+        activeStationId: String?
+    ): String? {
+        return when {
+            currentSelection != null && currentSelection in availableStations -> currentSelection
+            activeStationId != null && activeStationId in availableStations -> activeStationId
+            else -> availableStations.firstOrNull()
+        }
+    }
+
+    private fun resolveSelectedArchetype(
+        availableArchetypes: List<String>,
+        currentSelection: String?
+    ): String? {
+        return when {
+            currentSelection != null && currentSelection in availableArchetypes -> currentSelection
+            else -> availableArchetypes.firstOrNull()
+        }
+    }
+
+    private fun isTerminalJobStatus(status: String): Boolean {
+        return status.equals("succeeded", ignoreCase = true) ||
+            status.equals("failed", ignoreCase = true)
+    }
+
+    private fun resetHostAdminRuntimeState(state: HostAdminConsoleState): HostAdminConsoleState {
+        return state.copy(
+            isLoadingOptions = false,
+            optionsStatusMessage = null,
+            isOptionsStatusError = false,
+            availableStations = emptyList(),
+            availableArchetypes = emptyList(),
+            selectedStationId = null,
+            selectedArchetype = null,
+            isSubmitting = false,
+            activeJob = null,
+            isPollingJob = false
+        )
+    }
+
     private companion object {
         private const val LISTENER_REFRESH_INTERVAL_MS = 3 * 60 * 1000L
+        private const val HOST_ADMIN_POLL_INTERVAL_MS = 3_000L
     }
 }

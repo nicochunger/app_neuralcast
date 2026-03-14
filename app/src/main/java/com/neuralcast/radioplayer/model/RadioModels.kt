@@ -61,5 +61,6 @@ data class UiState(
     val appPreferences: AppPreferences = AppPreferences(),
     val isAdminModeEnabled: Boolean = false,
     val isAdminModeAuthenticating: Boolean = false,
-    val skippingStationId: String? = null
+    val skippingStationId: String? = null,
+    val hostAdminConsole: HostAdminConsoleState = HostAdminConsoleState()
 )

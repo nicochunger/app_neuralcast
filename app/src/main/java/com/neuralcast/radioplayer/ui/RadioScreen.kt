@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Timer
@@ -84,6 +85,7 @@ fun RadioScreen(
     onSongRequestDismiss: () -> Unit,
     onSleepTimerSet: (Int?) -> Unit,
     onErrorShown: () -> Unit,
+    onAdminConsoleClick: () -> Unit,
     onSettingsClick: () -> Unit
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
@@ -120,6 +122,14 @@ fun RadioScreen(
                     }
                 },
                 actions = {
+                    if (uiState.hostAdminConsole.isConfigured) {
+                        IconButton(onClick = onAdminConsoleClick) {
+                            Icon(
+                                imageVector = Icons.Default.Tune,
+                                contentDescription = "Open Admin Console"
+                            )
+                        }
+                    }
                     SleepTimerMenu(
                         timerRemaining = uiState.sleepTimerRemaining,
                         onTimerSet = onSleepTimerSet

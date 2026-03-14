@@ -24,6 +24,8 @@ class SettingsRepository(private val context: Context) {
     private val RECENTLY_PLAYED_KEY = stringPreferencesKey("recently_played_json")
     private val ADMIN_MODE_ENABLED_KEY = booleanPreferencesKey("admin_mode_enabled")
     private val ADMIN_API_KEY = stringPreferencesKey("admin_api_key")
+    private val HOST_ADMIN_BASE_URL = stringPreferencesKey("host_admin_base_url")
+    private val HOST_ADMIN_TOKEN = stringPreferencesKey("host_admin_token")
 
     val preferences: Flow<AppPreferences> = context.dataStore.data.map { prefs ->
         AppPreferences(
@@ -42,6 +44,13 @@ class SettingsRepository(private val context: Context) {
         AdminSessionSnapshot(
             isAdminModeEnabled = prefs[ADMIN_MODE_ENABLED_KEY] ?: false,
             apiKey = prefs[ADMIN_API_KEY]
+        )
+    }
+
+    val hostAdminConfig: Flow<HostAdminConfigSnapshot> = context.dataStore.data.map { prefs ->
+        HostAdminConfigSnapshot(
+            baseUrl = prefs[HOST_ADMIN_BASE_URL].orEmpty(),
+            token = prefs[HOST_ADMIN_TOKEN].orEmpty()
         )
     }
 
@@ -88,6 +97,20 @@ class SettingsRepository(private val context: Context) {
         }
     }
 
+    suspend fun setHostAdminConfig(baseUrl: String, token: String) {
+        context.dataStore.edit { prefs ->
+            prefs[HOST_ADMIN_BASE_URL] = baseUrl
+            prefs[HOST_ADMIN_TOKEN] = token
+        }
+    }
+
+    suspend fun clearHostAdminConfig() {
+        context.dataStore.edit { prefs ->
+            prefs.remove(HOST_ADMIN_BASE_URL)
+            prefs.remove(HOST_ADMIN_TOKEN)
+        }
+    }
+
     private fun encodeHistory(history: List<PlaybackHistoryEntry>): String {
         val array = JSONArray()
         history.forEach { entry ->
@@ -126,5 +149,10 @@ class SettingsRepository(private val context: Context) {
     data class AdminSessionSnapshot(
         val isAdminModeEnabled: Boolean,
         val apiKey: String?
+    )
+
+    data class HostAdminConfigSnapshot(
+        val baseUrl: String,
+        val token: String
     )
 }

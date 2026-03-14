@@ -16,6 +16,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.neuralcast.radioplayer.model.AppTheme
+import com.neuralcast.radioplayer.ui.AdminConsoleScreen
 import com.neuralcast.radioplayer.ui.RadioPlayerViewModel
 import com.neuralcast.radioplayer.ui.RadioScreen
 import com.neuralcast.radioplayer.ui.SettingsScreen
@@ -54,6 +55,7 @@ class MainActivity : ComponentActivity() {
                             onSongRequestDismiss = viewModel::onSongRequestDismiss,
                             onSleepTimerSet = viewModel::setSleepTimer,
                             onErrorShown = viewModel::onErrorShown,
+                            onAdminConsoleClick = { navController.navigate("admin_console") },
                             onSettingsClick = { navController.navigate("settings") }
                         )
                     }
@@ -63,9 +65,23 @@ class MainActivity : ComponentActivity() {
                             onThemeChanged = viewModel::saveTheme,
                             isAdminModeEnabled = uiState.isAdminModeEnabled,
                             isAdminModeAuthenticating = uiState.isAdminModeAuthenticating,
+                            hostAdminBaseUrl = uiState.hostAdminConsole.baseUrl,
+                            hostAdminToken = uiState.hostAdminConsole.token,
                             onEnableAdminMode = viewModel::enableAdminMode,
+                            onSaveHostAdminConfig = viewModel::saveHostAdminConfig,
                             onDisableAdminMode = viewModel::disableAdminMode,
+                            onOpenAdminConsole = { navController.navigate("admin_console") },
                             onNavigateBack = { navController.popBackStack() }
+                        )
+                    }
+                    composable("admin_console") {
+                        AdminConsoleScreen(
+                            hostAdminState = uiState.hostAdminConsole,
+                            onNavigateBack = { navController.popBackStack() },
+                            onRefreshOptions = viewModel::loadHostAdminOptions,
+                            onStationSelected = viewModel::selectHostAdminStation,
+                            onArchetypeSelected = viewModel::selectHostAdminArchetype,
+                            onRunForcedArchetype = viewModel::runForcedArchetype
                         )
                     }
                 }
