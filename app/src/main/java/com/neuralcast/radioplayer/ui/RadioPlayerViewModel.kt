@@ -21,6 +21,12 @@ import com.neuralcast.radioplayer.data.StationProvider
 import com.neuralcast.radioplayer.data.StationStatusRepository
 import com.neuralcast.radioplayer.model.HostAdminConsoleState
 import com.neuralcast.radioplayer.model.HostAdminJob
+import com.neuralcast.radioplayer.model.HOST_ADMIN_OPERATION_FORCE_ARCHETYPE
+import com.neuralcast.radioplayer.model.HOST_ADMIN_OPERATION_SCHEDULE_GENERATOR
+import com.neuralcast.radioplayer.model.HOST_ADMIN_SCHEDULE_SEED_MODE_CUSTOM
+import com.neuralcast.radioplayer.model.HOST_ADMIN_SCHEDULE_SEED_MODE_FRESH
+import com.neuralcast.radioplayer.model.HostAdminScheduleOptions
+import com.neuralcast.radioplayer.model.doesArchetypeSupportTrackFocus
 import com.neuralcast.radioplayer.model.PlaybackStatus
 import com.neuralcast.radioplayer.model.RequestableSong
 import com.neuralcast.radioplayer.model.RadioStation
@@ -296,7 +302,7 @@ class RadioPlayerViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
-    fun loadHostAdminOptions() {
+    fun loadHostAdminCapabilities() {
         val hostAdminState = _uiState.value.hostAdminConsole
         if (!hostAdminState.isConfigured) {
             _uiState.update { current ->
@@ -304,57 +310,87 @@ class RadioPlayerViewModel(application: Application) : AndroidViewModel(applicat
             }
             return
         }
-        if (hostAdminState.isLoadingOptions) {
+        if (hostAdminState.isLoadingCapabilities) {
             return
         }
 
         _uiState.update { current ->
             current.copy(
                 hostAdminConsole = current.hostAdminConsole.copy(
-                    isLoadingOptions = true,
-                    optionsStatusMessage = "Loading stations and archetypes...",
-                    isOptionsStatusError = false
+                    isLoadingCapabilities = true,
+                    capabilitiesStatusMessage = "Loading admin capabilities...",
+                    isCapabilitiesStatusError = false
                 )
             )
         }
 
         viewModelScope.launch {
             runCatching {
-                hostAdminRepository.getOptions(
+                hostAdminRepository.getCapabilities(
                     baseUrl = hostAdminState.baseUrl,
                     token = hostAdminState.token
                 )
-            }.onSuccess { options ->
+            }.onSuccess { capabilities ->
                 _uiState.update { current ->
                     val selectedStation = resolveSelectedStation(
-                        availableStations = options.stations,
+                        availableStations = capabilities.stations,
                         currentSelection = current.hostAdminConsole.selectedStationId,
                         activeStationId = current.activeStationId
                     )
                     val selectedArchetype = resolveSelectedArchetype(
-                        availableArchetypes = options.archetypes,
+                        availableArchetypes = capabilities.archetypes,
                         currentSelection = current.hostAdminConsole.selectedArchetype
                     )
+                    val scheduleCapability = capabilities.operations[HOST_ADMIN_OPERATION_SCHEDULE_GENERATOR]
+                    val supportedSeedModes = scheduleCapability?.supportedSeedModes.orEmpty()
+                    val defaultSeedMode = scheduleCapability?.defaultSeedMode
+                        ?.takeIf { it in supportedSeedModes }
+                        ?: supportedSeedModes.firstOrNull()
+                        ?: HOST_ADMIN_SCHEDULE_SEED_MODE_FRESH
+                    val selectedScheduleSeedMode = current.hostAdminConsole.selectedScheduleGeneratorSeedMode
+                        .takeIf { it in supportedSeedModes }
+                        ?.takeIf { it.isNotBlank() }
+                        ?: defaultSeedMode
                     current.copy(
                         hostAdminConsole = current.hostAdminConsole.copy(
-                            isLoadingOptions = false,
-                            optionsStatusMessage = "Loaded ${options.stations.size} stations and ${options.archetypes.size} archetypes.",
-                            isOptionsStatusError = false,
-                            availableStations = options.stations,
-                            availableArchetypes = options.archetypes,
+                            isLoadingCapabilities = false,
+                            capabilitiesStatusMessage = "Loaded ${capabilities.stations.size} stations, ${capabilities.archetypes.size} archetypes, and ${capabilities.operations.size} operations.",
+                            isCapabilitiesStatusError = false,
+                            availableStations = capabilities.stations,
+                            availableArchetypes = capabilities.archetypes,
+                            availableTrackFocusValues = capabilities.trackFocusValues,
+                            trackFocusArchetypes = capabilities.trackFocusArchetypes,
+                            operationCapabilities = capabilities.operations,
                             selectedStationId = selectedStation,
-                            selectedArchetype = selectedArchetype
+                            selectedArchetype = selectedArchetype,
+                            selectedTrackFocus = current.hostAdminConsole.selectedTrackFocus
+                                ?.takeIf { it in capabilities.trackFocusValues }
+                                ?.takeIf {
+                                    capabilities.operations[HOST_ADMIN_OPERATION_FORCE_ARCHETYPE]
+                                        ?.trackFocusSupported == true &&
+                                        doesArchetypeSupportTrackFocus(
+                                            selectedArchetype,
+                                            capabilities.trackFocusArchetypes
+                                        )
+                                },
+                            scheduleGeneratorForceApply = current.hostAdminConsole.scheduleGeneratorForceApply
+                                .takeIf { scheduleCapability?.forceApplySupported == true }
+                                ?: false,
+                            selectedScheduleGeneratorSeedMode = selectedScheduleSeedMode,
+                            scheduleGeneratorSeedSalt = current.hostAdminConsole.scheduleGeneratorSeedSalt
+                                .takeIf { selectedScheduleSeedMode == HOST_ADMIN_SCHEDULE_SEED_MODE_CUSTOM }
+                                .orEmpty()
                         )
                     )
                 }
             }.onFailure { error ->
                 _uiState.update { current ->
-                    val message = error.message ?: "Unable to load host admin options."
+                    val message = error.message ?: "Unable to load host admin capabilities."
                     current.copy(
                         hostAdminConsole = current.hostAdminConsole.copy(
-                            isLoadingOptions = false,
-                            optionsStatusMessage = message,
-                            isOptionsStatusError = true
+                            isLoadingCapabilities = false,
+                            capabilitiesStatusMessage = message,
+                            isCapabilitiesStatusError = true
                         ),
                         errorMessage = message
                     )
@@ -374,7 +410,143 @@ class RadioPlayerViewModel(application: Application) : AndroidViewModel(applicat
     fun selectHostAdminArchetype(archetype: String) {
         _uiState.update { current ->
             current.copy(
-                hostAdminConsole = current.hostAdminConsole.copy(selectedArchetype = archetype)
+                hostAdminConsole = current.hostAdminConsole.copy(
+                    selectedArchetype = archetype,
+                    selectedTrackFocus = current.hostAdminConsole.selectedTrackFocus
+                        ?.takeIf {
+                            current.hostAdminConsole.operationCapabilities[HOST_ADMIN_OPERATION_FORCE_ARCHETYPE]
+                                ?.trackFocusSupported == true &&
+                                doesArchetypeSupportTrackFocus(
+                                    archetype,
+                                    current.hostAdminConsole.trackFocusArchetypes
+                                )
+                        }
+                )
+            )
+        }
+    }
+
+    fun selectHostAdminTrackFocus(trackFocus: String?) {
+        val hostAdminState = _uiState.value.hostAdminConsole
+        _uiState.update { current ->
+            current.copy(
+                hostAdminConsole = current.hostAdminConsole.copy(
+                    selectedTrackFocus = trackFocus?.takeIf {
+                        it in hostAdminState.availableTrackFocusValues &&
+                            hostAdminState.supportsTrackFocus
+                    }
+                )
+            )
+        }
+    }
+
+    fun setHostAdminForceArchetypeDryRun(enabled: Boolean) {
+        _uiState.update { current ->
+            current.copy(
+                hostAdminConsole = current.hostAdminConsole.copy(forceArchetypeDryRun = enabled)
+            )
+        }
+    }
+
+    fun setHostAdminScheduleGeneratorDryRun(enabled: Boolean) {
+        _uiState.update { current ->
+            current.copy(
+                hostAdminConsole = current.hostAdminConsole.copy(
+                    scheduleGeneratorDryRun = enabled,
+                    scheduleGeneratorForceApply = if (enabled) {
+                        false
+                    } else {
+                        current.hostAdminConsole.scheduleGeneratorForceApply
+                    }
+                )
+            )
+        }
+    }
+
+    fun setHostAdminScheduleGeneratorForceApply(enabled: Boolean) {
+        _uiState.update { current ->
+            current.copy(
+                hostAdminConsole = current.hostAdminConsole.copy(
+                    scheduleGeneratorForceApply = enabled &&
+                        !current.hostAdminConsole.scheduleGeneratorDryRun
+                )
+            )
+        }
+    }
+
+    fun selectHostAdminScheduleGeneratorSeedMode(seedMode: String) {
+        _uiState.update { current ->
+            current.copy(
+                hostAdminConsole = current.hostAdminConsole.copy(
+                    selectedScheduleGeneratorSeedMode = seedMode,
+                    scheduleGeneratorSeedSalt = current.hostAdminConsole.scheduleGeneratorSeedSalt
+                        .takeIf { seedMode == HOST_ADMIN_SCHEDULE_SEED_MODE_CUSTOM }
+                        .orEmpty()
+                )
+            )
+        }
+    }
+
+    fun setHostAdminScheduleGeneratorSeedSalt(value: String) {
+        _uiState.update { current ->
+            current.copy(
+                hostAdminConsole = current.hostAdminConsole.copy(scheduleGeneratorSeedSalt = value)
+            )
+        }
+    }
+
+    fun setHostAdminScheduleGeneratorWeekStartDate(value: String) {
+        _uiState.update { current ->
+            current.copy(
+                hostAdminConsole = current.hostAdminConsole.copy(scheduleGeneratorWeekStartDate = value)
+            )
+        }
+    }
+
+    fun setHostAdminScheduleGeneratorOpenRatioMin(value: String) {
+        _uiState.update { current ->
+            current.copy(
+                hostAdminConsole = current.hostAdminConsole.copy(scheduleGeneratorOpenRatioMin = value)
+            )
+        }
+    }
+
+    fun setHostAdminScheduleGeneratorOpenRatioMax(value: String) {
+        _uiState.update { current ->
+            current.copy(
+                hostAdminConsole = current.hostAdminConsole.copy(scheduleGeneratorOpenRatioMax = value)
+            )
+        }
+    }
+
+    fun setHostAdminScheduleGeneratorMinOpenSlots(value: String) {
+        _uiState.update { current ->
+            current.copy(
+                hostAdminConsole = current.hostAdminConsole.copy(scheduleGeneratorMinOpenSlots = value)
+            )
+        }
+    }
+
+    fun setHostAdminScheduleGeneratorMaxOpenSlots(value: String) {
+        _uiState.update { current ->
+            current.copy(
+                hostAdminConsole = current.hostAdminConsole.copy(scheduleGeneratorMaxOpenSlots = value)
+            )
+        }
+    }
+
+    fun setHostAdminScheduleGeneratorMinBlockMinutes(value: String) {
+        _uiState.update { current ->
+            current.copy(
+                hostAdminConsole = current.hostAdminConsole.copy(scheduleGeneratorMinBlockMinutes = value)
+            )
+        }
+    }
+
+    fun setHostAdminScheduleGeneratorMaxBlockMinutes(value: String) {
+        _uiState.update { current ->
+            current.copy(
+                hostAdminConsole = current.hostAdminConsole.copy(scheduleGeneratorMaxBlockMinutes = value)
             )
         }
     }
@@ -396,14 +568,32 @@ class RadioPlayerViewModel(application: Application) : AndroidViewModel(applicat
             }
             return
         }
+        if (!hostAdminState.supportsOperation(HOST_ADMIN_OPERATION_FORCE_ARCHETYPE)) {
+            _uiState.update { current ->
+                current.copy(errorMessage = "Force archetype is not supported by this server.")
+            }
+            return
+        }
 
         if (hostAdminState.isSubmitting || hostAdminState.isPollingJob) {
             return
         }
 
+        val trackFocus = hostAdminState.selectedTrackFocus
+            ?.takeIf { it in hostAdminState.availableTrackFocusValues }
+            ?.takeIf {
+                hostAdminState.operationCapabilities[HOST_ADMIN_OPERATION_FORCE_ARCHETYPE]
+                    ?.trackFocusSupported == true &&
+                    doesArchetypeSupportTrackFocus(archetype, hostAdminState.trackFocusArchetypes)
+            }
+        val dryRun = hostAdminState.forceArchetypeDryRun
+            .takeIf { hostAdminState.supportsForceArchetypeDryRun } ?: false
+
         _uiState.update { current ->
             current.copy(
-                hostAdminConsole = current.hostAdminConsole.copy(isSubmitting = true)
+                hostAdminConsole = current.hostAdminConsole.copy(
+                    submittingOperation = HOST_ADMIN_OPERATION_FORCE_ARCHETYPE
+                )
             )
         }
 
@@ -413,23 +603,27 @@ class RadioPlayerViewModel(application: Application) : AndroidViewModel(applicat
                     baseUrl = hostAdminState.baseUrl,
                     token = hostAdminState.token,
                     station = stationId,
-                    archetype = archetype
+                    archetype = archetype,
+                    trackFocus = trackFocus,
+                    dryRun = dryRun
                 )
             }.onSuccess { jobId ->
                 _uiState.update { current ->
                     current.copy(
                         hostAdminConsole = current.hostAdminConsole.copy(
-                            isSubmitting = false,
+                            submittingOperation = null,
                             activeJob = HostAdminJob(
                                 jobId = jobId,
+                                operation = HOST_ADMIN_OPERATION_FORCE_ARCHETYPE,
                                 station = stationId,
                                 archetype = archetype,
-                                dryRun = false,
+                                trackFocus = trackFocus,
+                                dryRun = dryRun,
                                 status = "accepted"
                             ),
                             isPollingJob = true
                         ),
-                        errorMessage = "Forced archetype request accepted."
+                        errorMessage = "Force archetype request accepted."
                     )
                 }
                 startPollingHostAdminJob(
@@ -440,8 +634,160 @@ class RadioPlayerViewModel(application: Application) : AndroidViewModel(applicat
             }.onFailure { error ->
                 _uiState.update { current ->
                     current.copy(
-                        hostAdminConsole = current.hostAdminConsole.copy(isSubmitting = false),
+                        hostAdminConsole = current.hostAdminConsole.copy(submittingOperation = null),
                         errorMessage = error.message ?: "Unable to start a forced host run."
+                    )
+                }
+            }
+        }
+    }
+
+    fun runScheduleGenerator() {
+        val hostAdminState = _uiState.value.hostAdminConsole
+        if (!hostAdminState.isConfigured) {
+            _uiState.update { current ->
+                current.copy(errorMessage = "Save the host admin API URL and token first.")
+            }
+            return
+        }
+
+        val stationId = hostAdminState.selectedStationId
+        if (stationId.isNullOrBlank()) {
+            _uiState.update { current ->
+                current.copy(errorMessage = "Select a station first.")
+            }
+            return
+        }
+        if (!hostAdminState.supportsOperation(HOST_ADMIN_OPERATION_SCHEDULE_GENERATOR)) {
+            _uiState.update { current ->
+                current.copy(errorMessage = "Schedule generator is not supported by this server.")
+            }
+            return
+        }
+
+        if (hostAdminState.isSubmitting || hostAdminState.isPollingJob) {
+            return
+        }
+
+        val dryRun = hostAdminState.scheduleGeneratorDryRun
+            .takeIf { hostAdminState.supportsScheduleGeneratorDryRun } ?: false
+        val forceApply = hostAdminState.scheduleGeneratorForceApply
+            .takeIf { hostAdminState.supportsScheduleGeneratorForceApply && !dryRun } ?: false
+        val seedMode = hostAdminState.normalizedScheduleGeneratorSeedMode
+            .takeIf { hostAdminState.supportedScheduleGeneratorSeedModes.isNotEmpty() }
+        val seedSalt = when (seedMode) {
+            HOST_ADMIN_SCHEDULE_SEED_MODE_CUSTOM -> hostAdminState.scheduleGeneratorSeedSalt
+                .trim()
+                .takeIf { it.isNotBlank() }
+            else -> null
+        }
+        if (seedMode == HOST_ADMIN_SCHEDULE_SEED_MODE_CUSTOM && seedSalt == null) {
+            _uiState.update { current ->
+                current.copy(errorMessage = "Enter a custom seed key first.")
+            }
+            return
+        }
+
+        val weekStartDate = hostAdminState.scheduleGeneratorWeekStartDate
+            .trim()
+            .takeIf { hostAdminState.supportsScheduleGeneratorWeekStartDate }
+            ?.takeIf { it.isNotBlank() }
+        val openRatioMin = parseOptionalHostAdminDouble(
+            label = "Open ratio min",
+            rawValue = hostAdminState.scheduleGeneratorOpenRatioMin,
+            enabled = hostAdminState.supportsScheduleGeneratorTuningField("open_ratio_min")
+        ) ?: return
+        val openRatioMax = parseOptionalHostAdminDouble(
+            label = "Open ratio max",
+            rawValue = hostAdminState.scheduleGeneratorOpenRatioMax,
+            enabled = hostAdminState.supportsScheduleGeneratorTuningField("open_ratio_max")
+        ) ?: return
+        val minOpenSlots = parseOptionalHostAdminInt(
+            label = "Min open slots",
+            rawValue = hostAdminState.scheduleGeneratorMinOpenSlots,
+            enabled = hostAdminState.supportsScheduleGeneratorTuningField("min_open_slots")
+        ) ?: return
+        val maxOpenSlots = parseOptionalHostAdminInt(
+            label = "Max open slots",
+            rawValue = hostAdminState.scheduleGeneratorMaxOpenSlots,
+            enabled = hostAdminState.supportsScheduleGeneratorTuningField("max_open_slots")
+        ) ?: return
+        val minBlockMinutes = parseOptionalHostAdminInt(
+            label = "Min block minutes",
+            rawValue = hostAdminState.scheduleGeneratorMinBlockMinutes,
+            enabled = hostAdminState.supportsScheduleGeneratorTuningField("min_block_minutes")
+        ) ?: return
+        val maxBlockMinutes = parseOptionalHostAdminInt(
+            label = "Max block minutes",
+            rawValue = hostAdminState.scheduleGeneratorMaxBlockMinutes,
+            enabled = hostAdminState.supportsScheduleGeneratorTuningField("max_block_minutes")
+        ) ?: return
+
+        _uiState.update { current ->
+            current.copy(
+                hostAdminConsole = current.hostAdminConsole.copy(
+                    submittingOperation = HOST_ADMIN_OPERATION_SCHEDULE_GENERATOR
+                )
+            )
+        }
+
+        viewModelScope.launch {
+            runCatching {
+                hostAdminRepository.submitScheduleGenerator(
+                    baseUrl = hostAdminState.baseUrl,
+                    token = hostAdminState.token,
+                    station = stationId,
+                    dryRun = dryRun,
+                    forceApply = forceApply,
+                    seedMode = seedMode,
+                    seedSalt = seedSalt,
+                    weekStartDate = weekStartDate,
+                    openRatioMin = openRatioMin,
+                    openRatioMax = openRatioMax,
+                    minOpenSlots = minOpenSlots,
+                    maxOpenSlots = maxOpenSlots,
+                    minBlockMinutes = minBlockMinutes,
+                    maxBlockMinutes = maxBlockMinutes
+                )
+            }.onSuccess { jobId ->
+                _uiState.update { current ->
+                    current.copy(
+                        hostAdminConsole = current.hostAdminConsole.copy(
+                            submittingOperation = null,
+                            activeJob = HostAdminJob(
+                                jobId = jobId,
+                                operation = HOST_ADMIN_OPERATION_SCHEDULE_GENERATOR,
+                                station = stationId,
+                                dryRun = dryRun,
+                                scheduleOptions = HostAdminScheduleOptions(
+                                    forceApply = forceApply,
+                                    seedMode = seedMode,
+                                    seedSalt = seedSalt,
+                                    weekStartDate = weekStartDate,
+                                    openRatioMin = openRatioMin,
+                                    openRatioMax = openRatioMax,
+                                    minOpenSlots = minOpenSlots,
+                                    maxOpenSlots = maxOpenSlots,
+                                    minBlockMinutes = minBlockMinutes,
+                                    maxBlockMinutes = maxBlockMinutes
+                                ),
+                                status = "accepted"
+                            ),
+                            isPollingJob = true
+                        ),
+                        errorMessage = "Schedule generator request accepted."
+                    )
+                }
+                startPollingHostAdminJob(
+                    jobId = jobId,
+                    baseUrl = hostAdminState.baseUrl,
+                    token = hostAdminState.token
+                )
+            }.onFailure { error ->
+                _uiState.update { current ->
+                    current.copy(
+                        hostAdminConsole = current.hostAdminConsole.copy(submittingOperation = null),
+                        errorMessage = error.message ?: "Unable to start the schedule generator."
                     )
                 }
             }
@@ -836,7 +1182,10 @@ class RadioPlayerViewModel(application: Application) : AndroidViewModel(applicat
                 if (result.isFailure) {
                     _uiState.update { current ->
                         current.copy(
-                            hostAdminConsole = current.hostAdminConsole.copy(isPollingJob = false),
+                            hostAdminConsole = current.hostAdminConsole.copy(
+                                isPollingJob = false,
+                                submittingOperation = null
+                            ),
                             errorMessage = result.exceptionOrNull()?.message
                                 ?: "Unable to refresh host job status."
                         )
@@ -858,13 +1207,7 @@ class RadioPlayerViewModel(application: Application) : AndroidViewModel(applicat
                 if (isTerminal) {
                     _uiState.update { current ->
                         current.copy(
-                            errorMessage = when (job.status.lowercase()) {
-                                "succeeded" -> "Forced archetype completed for ${job.station}."
-                                else -> {
-                                    val exitSuffix = job.exitCode?.let { " (exit code $it)" }.orEmpty()
-                                    "Forced archetype failed for ${job.station}$exitSuffix."
-                                }
-                            }
+                            errorMessage = buildHostAdminJobStatusMessage(job)
                         )
                     }
                     break
@@ -902,19 +1245,81 @@ class RadioPlayerViewModel(application: Application) : AndroidViewModel(applicat
             status.equals("failed", ignoreCase = true)
     }
 
+    private fun buildHostAdminJobStatusMessage(job: HostAdminJob): String {
+        val operationLabel = when (job.operation) {
+            HOST_ADMIN_OPERATION_SCHEDULE_GENERATOR -> "Schedule generator"
+            else -> "Force archetype"
+        }
+        return when (job.status.lowercase()) {
+            "succeeded" -> "$operationLabel completed for ${job.station}."
+            else -> {
+                val exitSuffix = job.exitCode?.let { " (exit code $it)" }.orEmpty()
+                "$operationLabel failed for ${job.station}$exitSuffix."
+            }
+        }
+    }
+
     private fun resetHostAdminRuntimeState(state: HostAdminConsoleState): HostAdminConsoleState {
         return state.copy(
-            isLoadingOptions = false,
-            optionsStatusMessage = null,
-            isOptionsStatusError = false,
+            isLoadingCapabilities = false,
+            capabilitiesStatusMessage = null,
+            isCapabilitiesStatusError = false,
             availableStations = emptyList(),
             availableArchetypes = emptyList(),
+            availableTrackFocusValues = emptyList(),
+            trackFocusArchetypes = emptySet(),
+            operationCapabilities = emptyMap(),
             selectedStationId = null,
             selectedArchetype = null,
-            isSubmitting = false,
+            selectedTrackFocus = null,
+            forceArchetypeDryRun = false,
+            scheduleGeneratorDryRun = false,
+            scheduleGeneratorForceApply = false,
+            selectedScheduleGeneratorSeedMode = HOST_ADMIN_SCHEDULE_SEED_MODE_FRESH,
+            scheduleGeneratorSeedSalt = "",
+            scheduleGeneratorWeekStartDate = "",
+            scheduleGeneratorOpenRatioMin = "",
+            scheduleGeneratorOpenRatioMax = "",
+            scheduleGeneratorMinOpenSlots = "",
+            scheduleGeneratorMaxOpenSlots = "",
+            scheduleGeneratorMinBlockMinutes = "",
+            scheduleGeneratorMaxBlockMinutes = "",
+            submittingOperation = null,
             activeJob = null,
             isPollingJob = false
         )
+    }
+
+    private fun parseOptionalHostAdminDouble(
+        label: String,
+        rawValue: String,
+        enabled: Boolean
+    ): Double? {
+        if (!enabled) return null
+        val normalized = rawValue.trim()
+        if (normalized.isBlank()) return null
+        return normalized.toDoubleOrNull() ?: run {
+            _uiState.update { current ->
+                current.copy(errorMessage = "$label must be a number.")
+            }
+            null
+        }
+    }
+
+    private fun parseOptionalHostAdminInt(
+        label: String,
+        rawValue: String,
+        enabled: Boolean
+    ): Int? {
+        if (!enabled) return null
+        val normalized = rawValue.trim()
+        if (normalized.isBlank()) return null
+        return normalized.toIntOrNull() ?: run {
+            _uiState.update { current ->
+                current.copy(errorMessage = "$label must be a whole number.")
+            }
+            null
+        }
     }
 
     private companion object {

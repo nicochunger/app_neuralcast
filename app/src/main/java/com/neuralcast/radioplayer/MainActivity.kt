@@ -78,10 +78,24 @@ class MainActivity : ComponentActivity() {
                         AdminConsoleScreen(
                             hostAdminState = uiState.hostAdminConsole,
                             onNavigateBack = { navController.popBackStack() },
-                            onRefreshOptions = viewModel::loadHostAdminOptions,
+                            onRefreshCapabilities = viewModel::loadHostAdminCapabilities,
                             onStationSelected = viewModel::selectHostAdminStation,
                             onArchetypeSelected = viewModel::selectHostAdminArchetype,
-                            onRunForcedArchetype = viewModel::runForcedArchetype
+                            onTrackFocusSelected = viewModel::selectHostAdminTrackFocus,
+                            onForceArchetypeDryRunChanged = viewModel::setHostAdminForceArchetypeDryRun,
+                            onScheduleGeneratorDryRunChanged = viewModel::setHostAdminScheduleGeneratorDryRun,
+                            onScheduleGeneratorForceApplyChanged = viewModel::setHostAdminScheduleGeneratorForceApply,
+                            onScheduleGeneratorSeedModeSelected = viewModel::selectHostAdminScheduleGeneratorSeedMode,
+                            onScheduleGeneratorSeedSaltChanged = viewModel::setHostAdminScheduleGeneratorSeedSalt,
+                            onScheduleGeneratorWeekStartDateChanged = viewModel::setHostAdminScheduleGeneratorWeekStartDate,
+                            onScheduleGeneratorOpenRatioMinChanged = viewModel::setHostAdminScheduleGeneratorOpenRatioMin,
+                            onScheduleGeneratorOpenRatioMaxChanged = viewModel::setHostAdminScheduleGeneratorOpenRatioMax,
+                            onScheduleGeneratorMinOpenSlotsChanged = viewModel::setHostAdminScheduleGeneratorMinOpenSlots,
+                            onScheduleGeneratorMaxOpenSlotsChanged = viewModel::setHostAdminScheduleGeneratorMaxOpenSlots,
+                            onScheduleGeneratorMinBlockMinutesChanged = viewModel::setHostAdminScheduleGeneratorMinBlockMinutes,
+                            onScheduleGeneratorMaxBlockMinutesChanged = viewModel::setHostAdminScheduleGeneratorMaxBlockMinutes,
+                            onRunForcedArchetype = viewModel::runForcedArchetype,
+                            onRunScheduleGenerator = viewModel::runScheduleGenerator
                         )
                     }
                 }
