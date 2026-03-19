@@ -11,7 +11,8 @@ object StationProvider {
             streamUrl = "https://neuralcast.duckdns.org/listen/neuralcast/radio.mp3",
             backgroundResId = R.drawable.neuralcast_bg,
             artworkResId = R.drawable.neuralcast_art,
-            description = "The future of broadcasting."
+            description = "The future of broadcasting.",
+            timezoneId = "Europe/Zurich"
         ),
         RadioStation(
             id = "neuralforge",
@@ -19,7 +20,9 @@ object StationProvider {
             streamUrl = "https://neuralcast.duckdns.org/listen/neuralforge/radio.mp3",
             backgroundResId = R.drawable.neuralforge_bg,
             artworkResId = R.drawable.neuralforge_art,
-            description = "Forging new sounds."
+            description = "Forging new sounds.",
+            timezoneId = "Europe/Zurich",
+            openRotationThreshold = 10
         )
     )
 

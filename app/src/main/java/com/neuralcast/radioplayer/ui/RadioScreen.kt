@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -71,8 +70,11 @@ import com.neuralcast.radioplayer.model.PlaybackStatus
 import com.neuralcast.radioplayer.model.RadioStation
 import com.neuralcast.radioplayer.model.RequestableSong
 import com.neuralcast.radioplayer.model.SongRequestState
+import com.neuralcast.radioplayer.model.StationScheduleSegment
+import com.neuralcast.radioplayer.model.StationScheduleSummary
 import com.neuralcast.radioplayer.model.UiState
 import java.text.DateFormat
+import java.time.ZoneId
 
 @Composable
 @OptIn(ExperimentalMaterial3Api::class)
@@ -85,6 +87,7 @@ fun RadioScreen(
     onSongRequestDismiss: () -> Unit,
     onSleepTimerSet: (Int?) -> Unit,
     onErrorShown: () -> Unit,
+    onOpenSchedule: (RadioStation) -> Unit,
     onAdminConsoleClick: () -> Unit,
     onSettingsClick: () -> Unit
 ) {
@@ -113,14 +116,6 @@ fun RadioScreen(
                         }
                     }
                 },
-                navigationIcon = {
-                    IconButton(onClick = onSettingsClick) {
-                        Icon(
-                            imageVector = Icons.Default.Settings,
-                            contentDescription = "Settings"
-                        )
-                    }
-                },
                 actions = {
                     if (uiState.hostAdminConsole.isConfigured) {
                         IconButton(onClick = onAdminConsoleClick) {
@@ -134,6 +129,12 @@ fun RadioScreen(
                         timerRemaining = uiState.sleepTimerRemaining,
                         onTimerSet = onSleepTimerSet
                     )
+                    IconButton(onClick = onSettingsClick) {
+                        Icon(
+                            imageVector = Icons.Default.Settings,
+                            contentDescription = "Settings"
+                        )
+                    }
                 }
             )
         },
@@ -154,8 +155,10 @@ fun RadioScreen(
                     isActive = station.id == uiState.activeStationId,
                     playbackStatus = uiState.playbackStatus,
                     nowPlaying = if (station.id == uiState.activeStationId) uiState.nowPlaying else null,
+                    scheduleSummary = uiState.scheduleSummaries[station.id],
                     onPlayToggle = { onPlayToggle(station) },
                     onSongRequestClick = { onSongRequestClick(station) },
+                    onOpenSchedule = { onOpenSchedule(station) },
                     showSkipTrack = uiState.isAdminModeEnabled,
                     isSkippingTrack = uiState.skippingStationId == station.id,
                     onSkipTrack = { onSkipTrack(station) }
@@ -275,13 +278,16 @@ private fun StationCard(
     isActive: Boolean,
     playbackStatus: PlaybackStatus,
     nowPlaying: String?,
+    scheduleSummary: StationScheduleSummary?,
     onPlayToggle: () -> Unit,
     onSongRequestClick: () -> Unit,
+    onOpenSchedule: () -> Unit,
     showSkipTrack: Boolean,
     isSkippingTrack: Boolean,
     onSkipTrack: () -> Unit
 ) {
     val cardShape = RoundedCornerShape(28.dp)
+    val stationZoneId = remember(station.timezoneId) { ZoneId.of(station.timezoneId) }
     val overlayBrush = Brush.verticalGradient(
         0.0f to Color.Black.copy(alpha = 0.1f),
         0.55f to Color.Black.copy(alpha = 0.45f),
@@ -295,8 +301,8 @@ private fun StationCard(
         else -> "Idle"
     }
     val nowPlayingValue = when {
-        !isActive -> "-"
-        nowPlaying.isNullOrBlank() -> "Waiting for metadata"
+        !isActive -> "Tap Play to start listening."
+        nowPlaying.isNullOrBlank() -> "Waiting for live metadata."
         else -> nowPlaying
     }
     val listenerText = "Listeners: ${listenerCount?.toString() ?: "--"}"
@@ -314,7 +320,7 @@ private fun StationCard(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .aspectRatio(16f / 9f) // Keep main image aspect ratio constant
+                .heightIn(min = 340.dp)
         ) {
             Image(
                 painter = painterResource(id = station.backgroundResId),
@@ -347,6 +353,15 @@ private fun StationCard(
                                 fontWeight = FontWeight.SemiBold
                             )
                         )
+                        station.description?.takeIf { it.isNotBlank() }?.let { description ->
+                            Text(
+                                text = description,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = Color.White.copy(alpha = 0.84f),
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Surface(
                                 color = Color.Black.copy(alpha = 0.45f),
@@ -400,7 +415,13 @@ private fun StationCard(
                             overflow = TextOverflow.Ellipsis
                         )
                     }
-                    
+
+                    ScheduleSummarySection(
+                        summary = scheduleSummary,
+                        zoneId = stationZoneId,
+                        onOpenSchedule = onOpenSchedule
+                    )
+
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End)
@@ -488,6 +509,127 @@ private fun StationCard(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun ScheduleSummarySection(
+    summary: StationScheduleSummary?,
+    zoneId: ZoneId,
+    onOpenSchedule: () -> Unit
+) {
+    Surface(
+        color = Color.Black.copy(alpha = 0.28f),
+        shape = RoundedCornerShape(24.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Text(
+                text = "Schedule",
+                style = MaterialTheme.typography.labelMedium,
+                color = Color.White.copy(alpha = 0.75f)
+            )
+
+            when {
+                summary == null || summary.isLoading -> {
+                    Text(
+                        text = "Loading today's schedule...",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color.White.copy(alpha = 0.92f)
+                    )
+                }
+
+                summary.errorMessage != null -> {
+                    Text(
+                        text = summary.errorMessage,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color.White.copy(alpha = 0.92f)
+                    )
+                }
+
+                summary.liveSegment != null || summary.upNextSegment != null -> {
+                    val primaryLabel = if (summary.liveSegment != null) "Live now" else "Next up"
+                    val primarySegment = summary.liveSegment ?: summary.upNextSegment
+                    primarySegment?.let { segment ->
+                        ScheduleSummaryLine(
+                            label = primaryLabel,
+                            segment = segment,
+                            zoneId = zoneId,
+                            maxLines = 2
+                        )
+                    }
+                    if (summary.liveSegment != null) {
+                        summary.upNextSegment?.let { segment ->
+                            ScheduleSummaryLine(
+                                label = "Up next",
+                                segment = segment,
+                                zoneId = zoneId,
+                                maxLines = 1
+                            )
+                        }
+                    }
+                }
+
+                else -> {
+                    Text(
+                        text = "No schedule published for today.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color.White.copy(alpha = 0.92f)
+                    )
+                }
+            }
+
+            TextButton(
+                onClick = onOpenSchedule,
+                modifier = Modifier.align(Alignment.End),
+                colors = ButtonDefaults.textButtonColors(contentColor = Color.White),
+                contentPadding = PaddingValues(0.dp)
+            ) {
+                Text(text = "Open full schedule")
+            }
+        }
+    }
+}
+
+@Composable
+private fun ScheduleSummaryLine(
+    label: String,
+    segment: StationScheduleSegment,
+    zoneId: ZoneId,
+    maxLines: Int
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = Color.White.copy(alpha = 0.72f)
+        )
+        Text(
+            text = scheduleSegmentTitle(segment),
+            style = MaterialTheme.typography.bodyLarge,
+            fontWeight = FontWeight.SemiBold,
+            color = Color.White.copy(alpha = 0.96f),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+        Text(
+            text = formatScheduleTimeRange(segment, zoneId),
+            style = MaterialTheme.typography.labelMedium,
+            color = Color.White.copy(alpha = 0.8f)
+        )
+        scheduleSegmentDetail(segment, maxPlaylistNames = 2)?.let { detail ->
+            Text(
+                text = detail,
+                style = MaterialTheme.typography.bodySmall,
+                color = Color.White.copy(alpha = 0.84f),
+                maxLines = maxLines,
+                overflow = TextOverflow.Ellipsis
+            )
         }
     }
 }

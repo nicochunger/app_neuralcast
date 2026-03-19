@@ -6,7 +6,9 @@ data class RadioStation(
     val streamUrl: String,
     val backgroundResId: Int,
     val artworkResId: Int,
-    val description: String? = null
+    val description: String? = null,
+    val timezoneId: String = "Europe/Zurich",
+    val openRotationThreshold: Int? = null
 )
 
 enum class PlaybackStatus {
@@ -51,6 +53,8 @@ data class SongRequestState(
 data class UiState(
     val stations: List<RadioStation> = emptyList(),
     val listenerCounts: Map<String, Int> = emptyMap(),
+    val scheduleSummaries: Map<String, StationScheduleSummary> = emptyMap(),
+    val scheduleDays: Map<String, StationScheduleDayState> = emptyMap(),
     val activeStationId: String? = null,
     val playbackStatus: PlaybackStatus = PlaybackStatus.Idle,
     val nowPlaying: String? = null,

@@ -18,6 +18,7 @@ import com.neuralcast.radioplayer.data.HostAdminRepository
 import com.neuralcast.radioplayer.data.SettingsRepository
 import com.neuralcast.radioplayer.data.SongRequestRepository
 import com.neuralcast.radioplayer.data.StationProvider
+import com.neuralcast.radioplayer.data.StationScheduleRepository
 import com.neuralcast.radioplayer.data.StationStatusRepository
 import com.neuralcast.radioplayer.model.HostAdminConsoleState
 import com.neuralcast.radioplayer.model.HostAdminJob
@@ -31,12 +32,18 @@ import com.neuralcast.radioplayer.model.PlaybackStatus
 import com.neuralcast.radioplayer.model.RequestableSong
 import com.neuralcast.radioplayer.model.RadioStation
 import com.neuralcast.radioplayer.model.SongRequestState
+import com.neuralcast.radioplayer.model.StationScheduleDayState
+import com.neuralcast.radioplayer.model.StationScheduleSegment
+import com.neuralcast.radioplayer.model.StationScheduleSummary
 import com.neuralcast.radioplayer.model.UiState
 import com.neuralcast.radioplayer.playback.PlaybackService
 import com.neuralcast.radioplayer.model.AppTheme
 import com.neuralcast.radioplayer.model.PlaybackHistoryEntry
 import com.neuralcast.radioplayer.playback.PlaybackConstants
 import com.neuralcast.radioplayer.util.MetadataHelper
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -49,6 +56,7 @@ class RadioPlayerViewModel(application: Application) : AndroidViewModel(applicat
     private val adminRepository = AdminRepository()
     private val hostAdminRepository = HostAdminRepository()
     private val stationStatusRepository = StationStatusRepository()
+    private val stationScheduleRepository = StationScheduleRepository()
     private val settingsRepository = SettingsRepository(application)
     private val songRequestRepository = SongRequestRepository()
     private val stations = StationProvider.stations
@@ -56,6 +64,7 @@ class RadioPlayerViewModel(application: Application) : AndroidViewModel(applicat
     private val _uiState = MutableStateFlow(
         UiState(
             stations = stations,
+            scheduleSummaries = stations.associate { it.id to StationScheduleSummary(isLoading = true) },
             activeStationId = null,
             playbackStatus = PlaybackStatus.Idle,
             nowPlaying = null,
@@ -114,11 +123,13 @@ class RadioPlayerViewModel(application: Application) : AndroidViewModel(applicat
 
     private var sleepTimerJob: kotlinx.coroutines.Job? = null
     private var listenerRefreshJob: kotlinx.coroutines.Job? = null
+    private var scheduleRefreshJob: kotlinx.coroutines.Job? = null
     private var hostAdminPollJob: kotlinx.coroutines.Job? = null
 
     init {
         connectToSession()
         startListenerCountUpdates()
+        startScheduleUpdates()
         viewModelScope.launch {
             settingsRepository.preferences.collect { prefs ->
                 _uiState.update { it.copy(appPreferences = prefs) }
@@ -1004,6 +1015,7 @@ class RadioPlayerViewModel(application: Application) : AndroidViewModel(applicat
 
     override fun onCleared() {
         listenerRefreshJob?.cancel()
+        scheduleRefreshJob?.cancel()
         hostAdminPollJob?.cancel()
         controller?.removeListener(playerListener)
         controller?.release()
@@ -1150,6 +1162,93 @@ class RadioPlayerViewModel(application: Application) : AndroidViewModel(applicat
         }
         _uiState.update { current ->
             current.copy(listenerCounts = updatedCounts)
+        }
+    }
+
+    fun loadScheduleForDay(stationId: String, date: LocalDate, forceRefresh: Boolean = false) {
+        val station = StationProvider.getStation(stationId) ?: return
+        val key = scheduleKey(station.id, date)
+        val existingState = _uiState.value.scheduleDays[key]
+        if (existingState?.isLoading == true) {
+            return
+        }
+        if (!forceRefresh && existingState != null && existingState.errorMessage == null) {
+            return
+        }
+
+        _uiState.update { current ->
+            val updatedDays = current.scheduleDays.toMutableMap()
+            updatedDays[key] = StationScheduleDayState(
+                date = date,
+                zoneId = station.timezoneId,
+                segments = existingState?.segments.orEmpty(),
+                isLoading = true
+            )
+            current.copy(scheduleDays = updatedDays)
+        }
+
+        viewModelScope.launch {
+            runCatching {
+                stationScheduleRepository.getScheduleForDay(station, date)
+            }.onSuccess { dayState ->
+                _uiState.update { current ->
+                    val updatedDays = current.scheduleDays.toMutableMap()
+                    updatedDays[key] = dayState
+                    val updatedSummaries = current.scheduleSummaries.toMutableMap()
+                    if (date == currentDateFor(station)) {
+                        updatedSummaries[station.id] = buildScheduleSummary(
+                            segments = dayState.segments,
+                            nowMillis = currentMillisFor()
+                        )
+                    }
+                    current.copy(
+                        scheduleDays = updatedDays,
+                        scheduleSummaries = updatedSummaries
+                    )
+                }
+            }.onFailure { error ->
+                _uiState.update { current ->
+                    val updatedDays = current.scheduleDays.toMutableMap()
+                    updatedDays[key] = StationScheduleDayState(
+                        date = date,
+                        zoneId = station.timezoneId,
+                        segments = existingState?.segments.orEmpty(),
+                        isLoading = false,
+                        errorMessage = error.message ?: "Unable to load schedule."
+                    )
+                    val updatedSummaries = current.scheduleSummaries.toMutableMap()
+                    if (date == currentDateFor(station)) {
+                        updatedSummaries[station.id] = StationScheduleSummary(
+                            isLoading = false,
+                            errorMessage = error.message ?: "Unable to load schedule."
+                        )
+                    }
+                    current.copy(
+                        scheduleDays = updatedDays,
+                        scheduleSummaries = updatedSummaries
+                    )
+                }
+            }
+        }
+    }
+
+    private fun startScheduleUpdates() {
+        scheduleRefreshJob?.cancel()
+        scheduleRefreshJob = viewModelScope.launch {
+            while (isActive) {
+                refreshTodaySchedules()
+                kotlinx.coroutines.delay(SCHEDULE_REFRESH_INTERVAL_MS)
+            }
+        }
+    }
+
+    private fun refreshTodaySchedules() {
+        stations.forEach { station ->
+            loadScheduleForDay(
+                stationId = station.id,
+                date = currentDateFor(station),
+                forceRefresh = true
+            )
         }
     }
 
@@ -1324,6 +1423,34 @@ class RadioPlayerViewModel(application: Application) : AndroidViewModel(applicat
 
     private companion object {
         private const val LISTENER_REFRESH_INTERVAL_MS = 3 * 60 * 1000L
+        private const val SCHEDULE_REFRESH_INTERVAL_MS = 5 * 60 * 1000L
         private const val HOST_ADMIN_POLL_INTERVAL_MS = 3_000L
+    }
+
+    private fun buildScheduleSummary(
+        segments: List<StationScheduleSegment>,
+        nowMillis: Long
+    ): StationScheduleSummary {
+        val liveSegment = segments.firstOrNull { nowMillis in it.startMillis until it.endMillis }
+        val upNextSegment = if (liveSegment != null) {
+            segments.firstOrNull { it.startMillis >= liveSegment.endMillis }
+        } else {
+            segments.firstOrNull { it.startMillis > nowMillis }
+        }
+        return StationScheduleSummary(
+            isLoading = false,
+            liveSegment = liveSegment,
+            upNextSegment = upNextSegment
+        )
+    }
+
+    private fun scheduleKey(stationId: String, date: LocalDate): String = "$stationId|$date"
+
+    private fun currentDateFor(station: RadioStation): LocalDate {
+        return Instant.now().atZone(ZoneId.of(station.timezoneId)).toLocalDate()
+    }
+
+    private fun currentMillisFor(): Long {
+        return Instant.now().toEpochMilli()
     }
 }

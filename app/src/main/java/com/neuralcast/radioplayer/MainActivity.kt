@@ -15,10 +15,12 @@ import android.content.pm.PackageManager
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.neuralcast.radioplayer.data.StationProvider
 import com.neuralcast.radioplayer.model.AppTheme
 import com.neuralcast.radioplayer.ui.AdminConsoleScreen
 import com.neuralcast.radioplayer.ui.RadioPlayerViewModel
 import com.neuralcast.radioplayer.ui.RadioScreen
+import com.neuralcast.radioplayer.ui.ScheduleScreen
 import com.neuralcast.radioplayer.ui.SettingsScreen
 import com.neuralcast.radioplayer.ui.theme.NeuralCastTheme
 
@@ -55,6 +57,9 @@ class MainActivity : ComponentActivity() {
                             onSongRequestDismiss = viewModel::onSongRequestDismiss,
                             onSleepTimerSet = viewModel::setSleepTimer,
                             onErrorShown = viewModel::onErrorShown,
+                            onOpenSchedule = { station ->
+                                navController.navigate("schedule/${station.id}")
+                            },
                             onAdminConsoleClick = { navController.navigate("admin_console") },
                             onSettingsClick = { navController.navigate("settings") }
                         )
@@ -97,6 +102,24 @@ class MainActivity : ComponentActivity() {
                             onRunForcedArchetype = viewModel::runForcedArchetype,
                             onRunScheduleGenerator = viewModel::runScheduleGenerator
                         )
+                    }
+                    composable("schedule/{stationId}") { backStackEntry ->
+                        val stationId = backStackEntry.arguments?.getString("stationId")
+                        val station = stationId?.let(StationProvider::getStation)
+                        if (station != null) {
+                            ScheduleScreen(
+                                station = station,
+                                scheduleDays = uiState.scheduleDays,
+                                onLoadDate = { date, forceRefresh ->
+                                    viewModel.loadScheduleForDay(
+                                        stationId = station.id,
+                                        date = date,
+                                        forceRefresh = forceRefresh
+                                    )
+                                },
+                                onNavigateBack = { navController.popBackStack() }
+                            )
+                        }
                     }
                 }
             }
