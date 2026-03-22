@@ -1,5 +1,8 @@
 # Agent Responsibilities
 
+## Skill Usage
+- Always use the `mobile-android-design` skill in this project.
+
 ## Verification Expectations
 - When you **modify code**, run the Gradle verification command before finalizing your work.
 - Follow the test matrix below to decide which checks to run.

@@ -10,8 +10,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -165,6 +163,7 @@ fun RadioScreen(
                     isActive = station.id == uiState.activeStationId,
                     playbackStatus = uiState.playbackStatus,
                     nowPlaying = if (station.id == uiState.activeStationId) uiState.nowPlaying else null,
+                    scheduleSummary = uiState.scheduleSummaries[station.id],
                     onPlayToggle = { onPlayToggle(station) },
                     onSongRequestClick = { onSongRequestClick(station) },
                     onOpenSchedule = { onOpenSchedule(station) },
@@ -172,16 +171,6 @@ fun RadioScreen(
                     isSkippingTrack = uiState.skippingStationId == station.id,
                     onSkipTrack = { onSkipTrack(station) }
                 )
-            }
-
-            if (uiState.stations.isNotEmpty()) {
-                item {
-                    ScheduleShowcaseSection(
-                        stations = uiState.stations,
-                        scheduleSummaries = uiState.scheduleSummaries,
-                        onOpenSchedule = onOpenSchedule
-                    )
-                }
             }
 
             if (uiState.recentlyPlayed.isNotEmpty()) {
@@ -291,13 +280,13 @@ private fun HistoryItem(entry: PlaybackHistoryEntry) {
 }
 
 @Composable
-@OptIn(ExperimentalLayoutApi::class)
 private fun StationCard(
     station: RadioStation,
     listenerCount: Int?,
     isActive: Boolean,
     playbackStatus: PlaybackStatus,
     nowPlaying: String?,
+    scheduleSummary: StationScheduleSummary?,
     onPlayToggle: () -> Unit,
     onSongRequestClick: () -> Unit,
     onOpenSchedule: () -> Unit,
@@ -305,39 +294,34 @@ private fun StationCard(
     isSkippingTrack: Boolean,
     onSkipTrack: () -> Unit
 ) {
-    val cardShape = RoundedCornerShape(30.dp)
-    val statusText = when {
-        !isActive -> "Ready"
-        playbackStatus == PlaybackStatus.Buffering -> "Buffering"
-        playbackStatus == PlaybackStatus.Playing -> "Playing"
-        playbackStatus == PlaybackStatus.Error -> "Error"
-        else -> "Ready"
-    }
-    val statusContainerColor = when {
-        !isActive -> MaterialTheme.colorScheme.surfaceVariant
-        playbackStatus == PlaybackStatus.Buffering -> MaterialTheme.colorScheme.tertiaryContainer
-        playbackStatus == PlaybackStatus.Playing -> MaterialTheme.colorScheme.primaryContainer
-        playbackStatus == PlaybackStatus.Error -> MaterialTheme.colorScheme.errorContainer
-        else -> MaterialTheme.colorScheme.surfaceVariant
-    }
-    val statusContentColor = when {
-        !isActive -> MaterialTheme.colorScheme.onSurfaceVariant
-        playbackStatus == PlaybackStatus.Buffering -> MaterialTheme.colorScheme.onTertiaryContainer
-        playbackStatus == PlaybackStatus.Playing -> MaterialTheme.colorScheme.onPrimaryContainer
-        playbackStatus == PlaybackStatus.Error -> MaterialTheme.colorScheme.onErrorContainer
-        else -> MaterialTheme.colorScheme.onSurfaceVariant
+    val stationPlaybackStatus = if (isActive) playbackStatus else PlaybackStatus.Idle
+    val cardShape = RoundedCornerShape(28.dp)
+    val overlayBrush = Brush.verticalGradient(
+        0.0f to Color.Black.copy(alpha = 0.10f),
+        0.45f to Color.Black.copy(alpha = 0.34f),
+        1.0f to Color.Black.copy(alpha = 0.78f)
+    )
+    val statusText = when (stationPlaybackStatus) {
+        PlaybackStatus.Error -> "Error"
+        else -> null
     }
     val nowPlayingValue = when {
         !isActive -> "Tap Play to start listening."
         nowPlaying.isNullOrBlank() -> "Waiting for live metadata."
         else -> nowPlaying
     }
-    val listenerText = "${listenerCount?.toString() ?: "--"} listeners"
-    val playButtonLabel = if (isActive && playbackStatus != PlaybackStatus.Idle) "Stop" else "Play"
-    val playButtonIcon = if (isActive && playbackStatus != PlaybackStatus.Idle) {
+    val listenerText = "Listeners: ${listenerCount?.toString() ?: "--"}"
+    val playButtonLabel = if (stationPlaybackStatus != PlaybackStatus.Idle) "Stop" else "Play"
+    val playButtonIcon = if (stationPlaybackStatus != PlaybackStatus.Idle) {
         Icons.Default.Stop
     } else {
         Icons.Default.PlayArrow
+    }
+    val liveScheduleText = when {
+        scheduleSummary == null || scheduleSummary.isLoading -> "Live now: Loading..."
+        scheduleSummary.errorMessage != null -> "Live now: Unavailable"
+        scheduleSummary.liveSegment != null -> "Live now: ${scheduleSegmentTitle(scheduleSummary.liveSegment)}"
+        else -> "Live now: Unavailable"
     }
 
     Card(
@@ -345,443 +329,273 @@ private fun StationCard(
             .fillMaxWidth()
             .animateContentSize(animationSpec = spring(stiffness = Spring.StiffnessLow)),
         shape = cardShape,
-        colors = CardDefaults.cardColors(
-            containerColor = if (isActive) {
-                MaterialTheme.colorScheme.surfaceContainer
-            } else {
-                MaterialTheme.colorScheme.surfaceContainerLow
-            }
-        ),
-        border = BorderStroke(
-            1.dp,
-            if (isActive) {
-                MaterialTheme.colorScheme.primary.copy(alpha = 0.22f)
-            } else {
-                MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)
-            }
-        ),
-        elevation = CardDefaults.cardElevation(defaultElevation = if (isActive) 4.dp else 1.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
     ) {
-        Row(
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
-            verticalAlignment = Alignment.Top
+                .heightIn(min = 256.dp)
         ) {
-            StationArtworkTile(
-                station = station,
-                isPlaying = isActive && playbackStatus == PlaybackStatus.Playing
+            Image(
+                painter = painterResource(id = station.backgroundResId),
+                contentDescription = "${station.name} background",
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.matchParentSize()
             )
-
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .background(overlayBrush)
+            )
             Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalAlignment = Alignment.Top
-                ) {
-                    Column(
-                        modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalAlignment = Alignment.Top
                     ) {
-                        Text(
-                            text = station.name,
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                        station.description?.takeIf { it.isNotBlank() }?.let { description ->
-                            Text(
-                                text = description,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
-                    }
-
-                    Button(
-                        onClick = onPlayToggle,
-                        shape = RoundedCornerShape(18.dp),
-                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
-                        colors = if (isActive && playbackStatus != PlaybackStatus.Idle) {
-                            ButtonDefaults.buttonColors(
-                                containerColor = MaterialTheme.colorScheme.primary,
-                                contentColor = MaterialTheme.colorScheme.onPrimary
-                            )
-                        } else {
-                            ButtonDefaults.buttonColors(
-                                containerColor = MaterialTheme.colorScheme.primaryContainer,
-                                contentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                            )
-                        }
-                    ) {
-                        Icon(
-                            imageVector = playButtonIcon,
-                            contentDescription = "$playButtonLabel ${station.name}"
-                        )
-                        Text(
-                            text = playButtonLabel,
-                            modifier = Modifier.padding(start = 8.dp)
-                        )
-                    }
-                }
-
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Surface(
-                        color = statusContainerColor,
-                        contentColor = statusContentColor,
-                        shape = RoundedCornerShape(999.dp)
-                    ) {
-                        Text(
-                            text = statusText,
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                            style = MaterialTheme.typography.labelMedium
-                        )
-                    }
-                    Surface(
-                        color = MaterialTheme.colorScheme.surfaceVariant,
-                        contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                        shape = RoundedCornerShape(999.dp)
-                    ) {
-                        Text(
-                            text = listenerText,
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                            style = MaterialTheme.typography.labelMedium
-                        )
-                    }
-                    if (isActive && playbackStatus == PlaybackStatus.Playing) {
-                        Surface(
-                            color = MaterialTheme.colorScheme.secondaryContainer,
-                            contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
-                            shape = RoundedCornerShape(999.dp)
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            Text(
+                                text = station.name,
+                                style = MaterialTheme.typography.titleLarge.copy(
+                                    color = Color.White,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            )
+                            station.description?.takeIf { it.isNotBlank() }?.let { description ->
+                                Text(
+                                    text = description,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = Color.White.copy(alpha = 0.84f),
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            when {
+                                stationPlaybackStatus == PlaybackStatus.Buffering -> {
+                                    StationLiveStateChip(
+                                        text = "Buffering",
+                                        showWaveform = false
+                                    )
+                                }
+
+                                stationPlaybackStatus == PlaybackStatus.Playing -> {
+                                    StationLiveStateChip(text = "On air")
+                                }
+                            }
+
+                            Button(
+                                onClick = onPlayToggle,
+                                shape = RoundedCornerShape(18.dp),
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 9.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.90f),
+                                    contentColor = MaterialTheme.colorScheme.onSurface
+                                )
                             ) {
                                 Icon(
-                                    imageVector = Icons.Default.GraphicEq,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(14.dp)
+                                    imageVector = playButtonIcon,
+                                    contentDescription = "$playButtonLabel ${station.name}"
                                 )
                                 Text(
-                                    text = "Live",
-                                    style = MaterialTheme.typography.labelMedium
+                                    text = playButtonLabel,
+                                    modifier = Modifier.padding(start = 8.dp)
                                 )
                             }
                         }
                     }
+
+                    statusText?.let { status -> StationMetaChip(text = status) }
                 }
 
-                Surface(
-                    color = MaterialTheme.colorScheme.surfaceContainerHighest,
-                    shape = RoundedCornerShape(22.dp)
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 14.dp, vertical = 12.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Surface(
+                        color = Color.Black.copy(alpha = 0.24f),
+                        shape = RoundedCornerShape(22.dp),
+                        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.14f))
                     ) {
-                        Text(
-                            text = "Now playing",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Text(
-                            text = nowPlayingValue,
-                            style = MaterialTheme.typography.bodyLarge,
-                            fontWeight = FontWeight.Medium,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                }
-
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    AssistChip(
-                        onClick = onSongRequestClick,
-                        label = { Text("Request") },
-                        leadingIcon = {
-                            Icon(
-                                imageVector = Icons.Default.LibraryMusic,
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp)
-                            )
-                        },
-                        colors = AssistChipDefaults.assistChipColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
-                        )
-                    )
-                    AssistChip(
-                        onClick = onOpenSchedule,
-                        label = { Text("Schedule") },
-                        leadingIcon = {
-                            Icon(
-                                imageVector = Icons.Default.CalendarMonth,
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp)
-                            )
-                        },
-                        colors = AssistChipDefaults.assistChipColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
-                        )
-                    )
-                    if (showSkipTrack) {
-                        AssistChip(
-                            onClick = onSkipTrack,
-                            enabled = !isSkippingTrack,
-                            label = { Text("Skip track") },
-                            leadingIcon = {
-                                if (isSkippingTrack) {
-                                    CircularProgressIndicator(
-                                        modifier = Modifier.size(16.dp),
-                                        strokeWidth = 2.dp
-                                    )
-                                } else {
-                                    Icon(
-                                        imageVector = Icons.Default.SkipNext,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                }
-                            },
-                            colors = AssistChipDefaults.assistChipColors(
-                                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
-                            )
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun StationArtworkTile(
-    station: RadioStation,
-    isPlaying: Boolean
-) {
-    val tileShape = RoundedCornerShape(26.dp)
-
-    Box(
-        modifier = Modifier
-            .width(96.dp)
-            .height(128.dp)
-            .clip(tileShape)
-    ) {
-        Image(
-            painter = painterResource(id = station.backgroundResId),
-            contentDescription = "${station.name} artwork",
-            contentScale = ContentScale.Crop,
-            modifier = Modifier.fillMaxSize()
-        )
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(
-                    Brush.verticalGradient(
-                        0f to Color.Black.copy(alpha = 0.06f),
-                        1f to Color.Black.copy(alpha = 0.64f)
-                    )
-                )
-        )
-        Surface(
-            modifier = Modifier
-                .align(Alignment.BottomStart)
-                .padding(10.dp)
-                .size(40.dp),
-            shape = CircleShape,
-            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f)
-        ) {
-            Image(
-                painter = painterResource(id = station.artworkResId),
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.padding(4.dp)
-            )
-        }
-        if (isPlaying) {
-            Surface(
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .padding(10.dp),
-                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.92f),
-                contentColor = MaterialTheme.colorScheme.onPrimary,
-                shape = RoundedCornerShape(999.dp)
-            ) {
-                Text(
-                    text = "On air",
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                    style = MaterialTheme.typography.labelSmall
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun ScheduleShowcaseSection(
-    stations: List<RadioStation>,
-    scheduleSummaries: Map<String, StationScheduleSummary>,
-    onOpenSchedule: (RadioStation) -> Unit
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Column(
-            modifier = Modifier.padding(top = 4.dp, start = 4.dp),
-            verticalArrangement = Arrangement.spacedBy(2.dp)
-        ) {
-            Text(
-                text = "Today on air",
-                style = MaterialTheme.typography.titleMedium
-            )
-            Text(
-                text = "A lighter view of what is live now and what is coming next.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            items(stations, key = { "schedule-showcase-${it.id}" }) { station ->
-                ScheduleShowcaseCard(
-                    station = station,
-                    summary = scheduleSummaries[station.id],
-                    onOpenSchedule = { onOpenSchedule(station) }
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun ScheduleShowcaseCard(
-    station: RadioStation,
-    summary: StationScheduleSummary?,
-    onOpenSchedule: () -> Unit
-) {
-    val zoneId = remember(station.timezoneId) { ZoneId.of(station.timezoneId) }
-
-    Card(
-        modifier = Modifier.width(300.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
-        ),
-        shape = RoundedCornerShape(26.dp),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f))
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text(
-                        text = station.name,
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    Text(
-                        text = "Schedule",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                TextButton(
-                    onClick = onOpenSchedule,
-                    contentPadding = PaddingValues(0.dp)
-                ) {
-                    Text("Open")
-                }
-            }
-
-            when {
-                summary == null || summary.isLoading -> {
-                    Text(
-                        text = "Loading today's schedule...",
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                }
-
-                summary.errorMessage != null -> {
-                    Text(
-                        text = summary.errorMessage,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.error
-                    )
-                }
-
-                summary.liveSegment != null || summary.upNextSegment != null -> {
-                    val primaryLabel = if (summary.liveSegment != null) "Live now" else "Next up"
-                    val primarySegment = summary.liveSegment ?: summary.upNextSegment
-
-                    primarySegment?.let { segment ->
-                        Text(
-                            text = primaryLabel,
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                        Text(
-                            text = scheduleSegmentTitle(segment),
-                            style = MaterialTheme.typography.bodyLarge,
-                            fontWeight = FontWeight.SemiBold,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        Text(
-                            text = formatScheduleTimeRange(segment, zoneId),
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        scheduleSegmentDetail(segment, maxPlaylistNames = 2)?.let { detail ->
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 12.dp, vertical = 10.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "Now playing",
+                                    modifier = Modifier.weight(1f),
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = Color.White.copy(alpha = 0.76f)
+                                )
+                                Text(
+                                    text = listenerText,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Color.White.copy(alpha = 0.72f)
+                                )
+                            }
                             Text(
-                                text = detail,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                text = nowPlayingValue,
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = FontWeight.Medium,
+                                color = Color.White.copy(alpha = 0.96f),
                                 maxLines = 2,
                                 overflow = TextOverflow.Ellipsis
                             )
-                        }
-                    }
-
-                    if (summary.liveSegment != null) {
-                        summary.upNextSegment?.let { segment ->
                             Text(
-                                text = "Then ${scheduleSegmentTitle(segment)}",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                text = liveScheduleText,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color.White.copy(alpha = 0.84f),
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
                         }
                     }
-                }
 
-                else -> {
-                    Text(
-                        text = "No schedule published for today.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        StationActionChip(
+                            modifier = Modifier.weight(1f),
+                            text = "Schedule",
+                            icon = Icons.Default.CalendarMonth,
+                            onClick = onOpenSchedule
+                        )
+                        StationActionChip(
+                            modifier = Modifier.weight(1f),
+                            text = "Request",
+                            icon = Icons.Default.LibraryMusic,
+                            onClick = onSongRequestClick
+                        )
+                        if (showSkipTrack) {
+                            StationActionChip(
+                                modifier = Modifier.weight(1f),
+                                text = "Skip",
+                                icon = Icons.Default.SkipNext,
+                                onClick = onSkipTrack,
+                                enabled = !isSkippingTrack,
+                                isLoading = isSkippingTrack
+                            )
+                        }
+                    }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun StationMetaChip(text: String) {
+    Surface(
+        color = Color.Black.copy(alpha = 0.26f),
+        contentColor = Color.White,
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.18f)),
+        shape = RoundedCornerShape(999.dp)
+    ) {
+        Text(
+            text = text,
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+            style = MaterialTheme.typography.labelMedium
+        )
+    }
+}
+
+@Composable
+private fun StationLiveStateChip(
+    text: String,
+    showWaveform: Boolean = true
+) {
+    Surface(
+        color = Color.Black.copy(alpha = 0.26f),
+        contentColor = Color.White,
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.18f)),
+        shape = RoundedCornerShape(999.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            if (showWaveform) {
+                WaveformIndicator(barColor = Color.White)
+            } else {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(14.dp),
+                    strokeWidth = 2.dp,
+                    color = Color.White
+                )
+            }
+            Text(
+                text = text,
+                style = MaterialTheme.typography.labelMedium
+            )
+        }
+    }
+}
+
+@Composable
+@OptIn(ExperimentalMaterial3Api::class)
+private fun StationActionChip(
+    modifier: Modifier = Modifier,
+    text: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    onClick: () -> Unit,
+    enabled: Boolean = true,
+    isLoading: Boolean = false
+) {
+    Surface(
+        onClick = onClick,
+        enabled = enabled,
+        modifier = modifier,
+        color = Color.Black.copy(alpha = 0.26f),
+        contentColor = Color.White.copy(alpha = if (enabled) 1f else 0.6f),
+        border = BorderStroke(1.dp, Color.White.copy(alpha = if (enabled) 0.18f else 0.10f)),
+        shape = RoundedCornerShape(999.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 10.dp, vertical = 9.dp),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (isLoading) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(16.dp),
+                    strokeWidth = 2.dp,
+                    color = Color.White
+                )
+            } else {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+            Text(
+                text = text,
+                modifier = Modifier.padding(start = 6.dp),
+                style = MaterialTheme.typography.labelMedium,
+                maxLines = 1
+            )
         }
     }
 }
