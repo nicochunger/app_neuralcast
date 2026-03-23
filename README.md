@@ -1,81 +1,71 @@
 # NeuralCast
 
-NeuralCast is a modern Android application for streaming curated web radio stations. Built with Kotlin, Jetpack Compose, and AndroidX Media3, it delivers a clean Material 3 interface with reliable background playback and system media integration.
+NeuralCast is a single-module Android radio app built with Kotlin, Jetpack Compose Material 3, Navigation Compose, DataStore, and AndroidX Media3. It streams two curated stations, keeps playback alive through a foreground media service, and exposes the same content through the phone UI, media controls, and Android Auto browse integration.
 
-## Features
+## What The App Does
 
-- **Dual station playback** with one-tap play/stop controls (only one station plays at a time).
-- **Now Playing metadata** via ICY stream tags.
-- **Animated visualizer** for active playback.
-- **Sleep timer** (15/30/45/60 minutes).
-- **Listening history** for recently played tracks.
-- **Background playback** with MediaSession notifications and lock screen controls.
+- Streams the two built-in stations, NeuralCast and NeuralForge.
+- Shows now-playing metadata, recent playback history, listener counts, and a sleep timer.
+- Provides station schedule screens with day-by-day navigation.
+- Includes Settings for theme selection and admin/host-orchestrator configuration.
+- Includes an Admin Console for AzuraCast skip-track controls and host-side orchestration workflows.
+- Supports background playback, media notifications, lock-screen controls, and Android Auto/media library browsing.
 
 ## Tech Stack
 
-- **Language:** Kotlin
-- **UI:** Jetpack Compose (Material 3)
-- **Architecture:** MVVM + Unidirectional Data Flow
-- **Playback:** AndroidX Media3 (ExoPlayer + MediaSessionService)
-- **Min SDK:** 24 (Android 7.0)
-- **Target SDK:** 34 (Android 14)
+- Kotlin
+- Jetpack Compose Material 3
+- Navigation Compose
+- DataStore Preferences
+- AndroidX Media3 (`ExoPlayer`, `MediaSessionService`, `MediaLibraryService`)
+- Min SDK 24
+- Compile SDK 36
+- Target SDK 36
+- Java/Kotlin 17
+
+## Key Areas Of The Codebase
+
+- `app/src/main/java/com/neuralcast/radioplayer/MainActivity.kt` wires theme, notification permission, and navigation.
+- `app/src/main/java/com/neuralcast/radioplayer/ui/` contains the main screens: radio, settings, schedule, and admin console.
+- `app/src/main/java/com/neuralcast/radioplayer/playback/` contains the Media3 service, notification provider, metadata handling, and now-playing store.
+- `app/src/main/java/com/neuralcast/radioplayer/data/` contains repositories for settings, station data, schedules, requests, admin, and host orchestration.
+- `app/src/main/java/com/neuralcast/radioplayer/model/` contains the app's immutable state and domain models.
 
 ## Station Streams
 
-- **NeuralCast:** `https://neuralcast.duckdns.org/listen/neuralcast/radio.mp3`
-- **NeuralForge:** `https://neuralcast.duckdns.org/listen/neuralforge/radio.mp3`
+- NeuralCast: `https://neuralcast.duckdns.org/listen/neuralcast/radio.mp3`
+- NeuralForge: `https://neuralcast.duckdns.org/listen/neuralforge/radio.mp3`
 
-## Project Structure
-
-```
-app/
-  src/main/java/com/neuralcast/radioplayer/
-    playback/PlaybackService.kt   # Media3 service + ExoPlayer
-    ui/RadioScreen.kt             # Compose UI
-    ui/RadioPlayerViewModel.kt    # UI state + actions
-    model/RadioModels.kt          # Station + UI state models
-```
-
-## Getting Started
+## Setup
 
 ### Prerequisites
 
-- **Android Studio** (latest stable)
-- **JDK 17+**
-- **Android SDK 34**
+- Android Studio
+- JDK 17
+- Android SDK 36
 
-### Run in Android Studio
+### Run Locally
 
-1. Open the project directory in Android Studio.
+1. Open the project in Android Studio.
 2. Let Gradle sync finish.
-3. Select a device or emulator.
-4. Click **Run**.
+3. Choose a device or emulator.
+4. Run the `app` configuration.
 
 ## Permissions
 
-The app requires the following permissions:
+The app declares:
 
 - `INTERNET`
 - `FOREGROUND_SERVICE`
-- `FOREGROUND_SERVICE_MEDIA_PLAYBACK` (Android 14+)
-- `POST_NOTIFICATIONS` (Android 13+ runtime permission)
+- `FOREGROUND_SERVICE_MEDIA_PLAYBACK`
+- `POST_NOTIFICATIONS`
 
-## Architecture Notes
+## Verification
 
-- **RadioPlayerViewModel** is the single source of truth for UI state and playback actions.
-- **PlaybackService** hosts the Media3 player + MediaSession for background playback.
-- **RadioScreen** is a stateless composable that renders `UiState` and emits user intents.
+- `./gradlew assembleDebug`
 
-## Build Notes
+If you change Kotlin logic or UI later, also run `./gradlew test` and/or `./gradlew lint` as appropriate. This repo currently does not include committed automated tests.
 
-This project is intended to be built and run through **Android Studio**. If you use Gradle directly, ensure you have the Android SDK and JDK 17 configured.
+## Notes For Contributors
 
-## Contributing
-
-1. Create a feature branch.
-2. Make changes with clear, focused commits.
-3. Open a pull request with a concise summary and test notes.
-
-## License
-
-This project is provided as-is for internal/demo use. Add a formal license file if you plan to distribute it.
+Keep this README as the main source of truth for architecture and setup. `GEMINI.md` and `IMPLEMENTATION_SPEC.md` were removed because they duplicated older, stale project assumptions.
