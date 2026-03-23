@@ -19,13 +19,16 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.LibraryMusic
@@ -47,6 +50,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -75,6 +79,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import com.neuralcast.radioplayer.model.PlaybackHistoryEntry
 import com.neuralcast.radioplayer.model.PlaybackStatus
 import com.neuralcast.radioplayer.model.RadioStation
@@ -125,25 +130,32 @@ fun RadioScreen(
                         }
                     }
                 },
-                actions = {
-                    if (uiState.hostAdminConsole.isConfigured) {
-                        IconButton(onClick = onAdminConsoleClick) {
+                navigationIcon = {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        IconButton(onClick = onSettingsClick) {
                             Icon(
-                                imageVector = Icons.Default.Tune,
-                                contentDescription = "Open Admin Console"
+                                imageVector = Icons.Default.Settings,
+                                contentDescription = "Settings"
                             )
                         }
+                        if (uiState.hostAdminConsole.isConfigured) {
+                            IconButton(onClick = onAdminConsoleClick) {
+                                Icon(
+                                    imageVector = Icons.Default.Tune,
+                                    contentDescription = "Open Admin Console"
+                                )
+                            }
+                        }
                     }
+                },
+                actions = {
                     SleepTimerMenu(
                         timerRemaining = uiState.sleepTimerRemaining,
                         onTimerSet = onSleepTimerSet
                     )
-                    IconButton(onClick = onSettingsClick) {
-                        Icon(
-                            imageVector = Icons.Default.Settings,
-                            contentDescription = "Settings"
-                        )
-                    }
                 }
             )
         },
@@ -215,8 +227,7 @@ private fun SleepTimerMenu(
         IconButton(onClick = { expanded = true }) {
             Icon(
                 imageVector = Icons.Default.Timer,
-                contentDescription = "Sleep Timer",
-                tint = if (timerRemaining != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                contentDescription = "Sleep Timer"
             )
         }
         DropdownMenu(
@@ -620,170 +631,163 @@ private fun SongRequestDialog(
         }
     }
 
-    Dialog(onDismissRequest = onDismiss) {
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(28.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.97f)
-            ),
-            border = BorderStroke(
-                1.dp,
-                MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)
-            )
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 24.dp),
+            contentAlignment = Alignment.Center
         ) {
-            Box(
-                modifier = Modifier.background(
-                    Brush.verticalGradient(
-                        0f to Color.Black.copy(alpha = 0.06f),
-                        1f to Color.Black.copy(alpha = 0.18f)
-                    )
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth(0.96f)
+                    .widthIn(max = 560.dp),
+                shape = RoundedCornerShape(28.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.98f),
+                    contentColor = MaterialTheme.colorScheme.onSurface
+                ),
+                border = BorderStroke(
+                    1.dp,
+                    MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.42f)
                 )
             ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(18.dp),
-                    verticalArrangement = Arrangement.spacedBy(14.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.Top,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Column(
-                            modifier = Modifier.weight(1f),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Surface(
-                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.28f),
-                                contentColor = MaterialTheme.colorScheme.onSurface,
-                                border = BorderStroke(
-                                    1.dp,
-                                    MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.30f)
-                                ),
-                                shape = RoundedCornerShape(999.dp)
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.LibraryMusic,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                    Text(
-                                        text = "Song requests",
-                                        style = MaterialTheme.typography.labelMedium
-                                    )
-                                }
-                            }
-                            Text(
-                                text = "Request a Song",
-                                style = MaterialTheme.typography.titleLarge,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                            Text(
-                                text = requestState.stationName,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Text(
-                                text = "Pick a track to queue your request.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.92f)
-                            )
-                        }
-
-                        TextButton(onClick = onDismiss) {
-                            Text("Close")
-                        }
-                    }
-
-                    OutlinedTextField(
-                        value = query,
-                        onValueChange = { query = it },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        placeholder = { Text("Search artist or title") },
-                        leadingIcon = {
-                            Icon(
-                                imageVector = Icons.Default.Search,
-                                contentDescription = null
-                            )
-                        },
-                        shape = RoundedCornerShape(20.dp),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.18f),
-                            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.12f),
-                            disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.12f),
-                            focusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.75f),
-                            unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f),
-                            focusedTextColor = MaterialTheme.colorScheme.onSurface,
-                            unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
-                            focusedLeadingIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                            unfocusedLeadingIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                            focusedPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                            unfocusedPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant
+                Box(
+                    modifier = Modifier.background(
+                        Brush.verticalGradient(
+                            0f to Color.Black.copy(alpha = 0.04f),
+                            1f to Color.Black.copy(alpha = 0.10f)
                         )
                     )
-
-                    Surface(
-                        modifier = Modifier.fillMaxWidth(),
-                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.14f),
-                        border = BorderStroke(
-                            1.dp,
-                            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.32f)
-                        ),
-                        shape = RoundedCornerShape(22.dp)
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        when {
-                            requestState.isLoading -> {
-                                Column(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 20.dp, vertical = 32.dp),
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                                ) {
-                                    CircularProgressIndicator(modifier = Modifier.size(28.dp))
-                                    Text(
-                                        text = "Loading available songs...",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                            }
-
-                            requestState.songs.isEmpty() -> {
-                                RequestStateMessage(
-                                    text = "No songs are currently available for request."
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.Top,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Column(
+                                modifier = Modifier.weight(1f),
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Text(
+                                    text = "Request a Song",
+                                    style = MaterialTheme.typography.titleLarge,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = requestState.stationName,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
 
-                            filteredSongs.isEmpty() -> {
-                                RequestStateMessage(
-                                    text = "No songs matched your search."
+                            IconButton(onClick = onDismiss) {
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = "Close song requests"
                                 )
                             }
+                        }
 
-                            else -> {
-                                LazyColumn(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .heightIn(max = 360.dp),
-                                    contentPadding = PaddingValues(12.dp),
-                                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                                ) {
-                                    items(filteredSongs, key = { it.requestId }) { song ->
-                                        RequestSongItem(
-                                            song = song,
-                                            isSubmitting = requestState.submittingRequestId == song.requestId,
-                                            isAnySubmissionInProgress = requestState.submittingRequestId != null,
-                                            onRequestSong = onRequestSong
+                        OutlinedTextField(
+                            value = query,
+                            onValueChange = { query = it },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                            textStyle = MaterialTheme.typography.bodyMedium,
+                            placeholder = { Text("Search artist or title") },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.Default.Search,
+                                    contentDescription = null
+                                )
+                            },
+                            shape = RoundedCornerShape(18.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.18f),
+                                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.10f),
+                                disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.10f),
+                                focusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.72f),
+                                unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.48f),
+                                focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                                unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+                                focusedLeadingIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                unfocusedLeadingIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                focusedPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                unfocusedPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        )
+
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 180.dp, max = 420.dp)
+                        ) {
+                            when {
+                                requestState.isLoading -> {
+                                    Column(
+                                        modifier = Modifier
+                                            .align(Alignment.Center)
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 20.dp, vertical = 32.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                                    ) {
+                                        CircularProgressIndicator(modifier = Modifier.size(28.dp))
+                                        Text(
+                                            text = "Loading available songs...",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
+                                    }
+                                }
+
+                                requestState.songs.isEmpty() -> {
+                                    Box(
+                                        modifier = Modifier.fillMaxSize(),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        RequestStateMessage(
+                                            text = "No songs are currently available for request."
+                                        )
+                                    }
+                                }
+
+                                filteredSongs.isEmpty() -> {
+                                    Box(
+                                        modifier = Modifier.fillMaxSize(),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        RequestStateMessage(
+                                            text = "No songs matched your search."
+                                        )
+                                    }
+                                }
+
+                                else -> {
+                                    LazyColumn(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        contentPadding = PaddingValues(vertical = 4.dp)
+                                    ) {
+                                        itemsIndexed(filteredSongs, key = { _, song -> song.requestId }) { index, song ->
+                                            RequestSongItem(
+                                                song = song,
+                                                isSubmitting = requestState.submittingRequestId == song.requestId,
+                                                isAnySubmissionInProgress = requestState.submittingRequestId != null,
+                                                showDivider = index < filteredSongs.lastIndex,
+                                                onRequestSong = onRequestSong
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -817,6 +821,7 @@ private fun RequestSongItem(
     song: RequestableSong,
     isSubmitting: Boolean,
     isAnySubmissionInProgress: Boolean,
+    showDivider: Boolean,
     onRequestSong: (RequestableSong) -> Unit
 ) {
     val titleText = song.title.ifBlank {
@@ -828,26 +833,19 @@ private fun RequestSongItem(
         else -> null
     }
 
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.28f),
-        contentColor = MaterialTheme.colorScheme.onSurface,
-        border = BorderStroke(
-            1.dp,
-            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.24f)
-        ),
-        shape = RoundedCornerShape(20.dp)
-    ) {
+    Column(modifier = Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 12.dp),
+                .padding(horizontal = 10.dp, vertical = 10.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(3.dp)
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(end = 6.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
             ) {
                 Text(
                     text = titleText,
@@ -871,33 +869,43 @@ private fun RequestSongItem(
             Button(
                 onClick = { onRequestSong(song) },
                 enabled = !isAnySubmissionInProgress,
-                shape = RoundedCornerShape(999.dp),
-                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
+                modifier = Modifier
+                    .width(96.dp)
+                    .heightIn(min = 36.dp),
+                shape = RoundedCornerShape(16.dp),
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.92f),
+                    containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.88f),
                     contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
                     disabledContainerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.62f),
                     disabledContentColor = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.88f)
                 )
             ) {
-                if (isSubmitting) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(14.dp),
-                        strokeWidth = 2.dp,
-                        color = MaterialTheme.colorScheme.onSecondaryContainer
-                    )
-                    Text(
-                        text = "Sending",
-                        modifier = Modifier.padding(start = 8.dp),
-                        style = MaterialTheme.typography.labelLarge
-                    )
-                } else {
-                    Text(
-                        text = "Request",
-                        style = MaterialTheme.typography.labelLarge
-                    )
+                Box(
+                    modifier = Modifier.fillMaxWidth(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (isSubmitting) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(14.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer
+                        )
+                    } else {
+                        Text(
+                            text = "Request",
+                            style = MaterialTheme.typography.labelLarge
+                        )
+                    }
                 }
             }
+        }
+
+        if (showDivider) {
+            HorizontalDivider(
+                modifier = Modifier.padding(start = 10.dp, end = 10.dp),
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)
+            )
         }
     }
 }
